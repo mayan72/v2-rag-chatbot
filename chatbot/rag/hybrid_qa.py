@@ -97,8 +97,11 @@ class HybridQAEngine:
             plan.reason,
         )
 
-        if plan.mode != "aggregate":
-            dbg("HYBRID_SKIP", reason="plan is not aggregate", mode=plan.mode)
+        # QueryPlanner emits mode="structured" for table calculations.
+        # The executor only runs those plans. "aggregate" is accepted
+        # only as a backward-compatible alias.
+        if plan.mode not in {"structured", "aggregate"}:
+            dbg("HYBRID_SKIP", reason="plan is not structured", mode=plan.mode)
             return None
 
         return self.executor.execute(plan, schemas)

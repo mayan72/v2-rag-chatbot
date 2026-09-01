@@ -38,7 +38,7 @@ def test_count_filters_any_schema(tmp_path):
         llm=None,
     )
 
-    assert plan.mode == "aggregate"
+    assert plan.mode == "structured"
     result = executor.execute(plan, schemas)
     assert result.answer == "2"
 
@@ -113,7 +113,7 @@ def test_total_revenue_for_region(tmp_path):
         llm=None,
     )
 
-    assert plan.mode == "aggregate"
+    assert plan.mode == "structured"
     assert plan.operation == "sum"
     assert plan.target_column == "Revenue"
     assert any(
@@ -122,6 +122,88 @@ def test_total_revenue_for_region(tmp_path):
     )
     result = executor.execute(plan, schemas)
     assert float(result.answer) == 605000.0
+
+
+def test_correlation_quantity_sold_and_revenue(tmp_path):
+    sales = pd.DataFrame(
+        {
+            "Order_ID": list(range(101, 119)),
+            "Quantity": list(range(1, 19)),
+            "Unit_Price": [1000] * 18,
+            "Revenue": [1000 * qty for qty in range(1, 19)],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"sales": sales})
+    schemas = store.list_schemas()
+
+    quantity_schema = next(
+        column
+        for column in next(schema["columns"] for schema in schemas)
+        if column["name"] == "Quantity"
+    )
+    assert quantity_schema["semantic_type"] == "integer"
+
+    plan = planner.plan(
+        "What is the correlation between Quantity sold and Revenue, "
+        "and is the relationship positive or negative?",
+        schemas,
+        llm=None,
+    )
+
+    assert plan.valid
+    assert plan.operation == "correlation"
+    assert set(plan.target_columns) == {"Quantity", "Revenue"}
+
+    result = executor.execute(plan, schemas)
+    assert result.matched
+    value = float(result.answer)
+    assert value > 0.99
+
+
+def test_correlation_resolves_quantity_typed_as_identifier():
+    planner = QueryPlanner()
+    schemas = [
+        {
+            "table_id": "uploaded_xlsx__sheet_sales_data",
+            "document_id": "uploaded_xlsx",
+            "document_name": "rag_structured_numeric_test.xlsx",
+            "sheet_name": "Sales_Data",
+            "row_count": 18,
+            "columns": [
+                {
+                    "name": "Order_ID",
+                    "semantic_type": "identifier",
+                    "dtype": "int64",
+                },
+                {
+                    "name": "Quantity",
+                    "semantic_type": "identifier",
+                    "dtype": "int64",
+                },
+                {
+                    "name": "Unit_Price",
+                    "semantic_type": "numeric",
+                    "dtype": "int64",
+                },
+                {
+                    "name": "Revenue",
+                    "semantic_type": "numeric",
+                    "dtype": "int64",
+                },
+            ],
+        }
+    ]
+
+    plan = planner.plan(
+        "What is the correlation between Quantity sold and Revenue, "
+        "and is the relationship positive or negative?",
+        schemas,
+        llm=None,
+    )
+
+    assert plan.valid
+    assert plan.operation == "correlation"
+    assert set(plan.target_columns) == {"Quantity", "Revenue"}
 
 
 def test_non_aggregate_stays_semantic(tmp_path):

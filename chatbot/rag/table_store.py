@@ -672,6 +672,32 @@ class TableStore:
         if tokens & identifier_tokens:
             return True
 
+        # Unique integer measures (Quantity, Revenue, Age) are
+        # not identifiers. Name tokens win over uniqueness.
+        measure_tokens = {
+            "quantity",
+            "qty",
+            "amount",
+            "revenue",
+            "price",
+            "sales",
+            "units",
+            "volume",
+            "count",
+            "cost",
+            "profit",
+            "salary",
+            "age",
+            "rate",
+            "score",
+            "weight",
+            "total",
+            "value",
+        }
+
+        if tokens & measure_tokens:
+            return False
+
         non_null = series.dropna()
 
         if non_null.empty:

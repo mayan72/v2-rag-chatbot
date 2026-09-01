@@ -1185,8 +1185,11 @@ class QueryPlanner:
         # Try to identify "between X and Y"
         # --------------------------------------------------------------
 
+        # Stop the second column at a following "and", comma, or
+        # end of question so extra clauses are not part of Y.
+        # Example: "between Quantity sold and Revenue, and is..."
         between_match = re.search(
-            r"\bbetween\s+(.+?)\s+\band\b\s+(.+?)(?:\?|$)",
+            r"\bbetween\s+(.+?)\s+\band\b\s+(.+?)(?=\s+and\b|\s*,|\s*\?|$)",
             question_normalized,
             flags=re.IGNORECASE,
         )
@@ -2545,24 +2548,56 @@ Rules:
             "role"
         )
 
-        if role == "measure":
-            dtype = str(
-                column.get(
-                    "dtype",
-                    ""
-                )
-            ).casefold()
-
-            return any(
-                token in dtype
-                for token in (
-                    "int",
-                    "float",
-                    "double",
-                    "decimal",
-                    "number",
-                )
+        dtype = str(
+            column.get(
+                "dtype",
+                ""
             )
+        ).casefold()
+
+        numeric_dtype = any(
+            token in dtype
+            for token in (
+                "int",
+                "float",
+                "double",
+                "decimal",
+                "number",
+            )
+        )
+
+        if role == "measure":
+            return numeric_dtype
+
+        # Integer/float columns named like measures (Quantity,
+        # Revenue) must stay usable even if schema typed them
+        # as identifier because values were unique.
+        if semantic_type == "identifier" and numeric_dtype:
+
+            name_tokens = set(
+                normalize_text(
+                    column.get(
+                        "name",
+                        "",
+                    )
+                ).split()
+            )
+
+            id_name_tokens = {
+                "id",
+                "code",
+                "key",
+                "identifier",
+                "sku",
+                "isin",
+                "cusip",
+                "uuid",
+            }
+
+            if name_tokens & id_name_tokens:
+                return False
+
+            return True
 
         return False
 

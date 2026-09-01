@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from config import MAX_VALUE_MATCH_CANDIDATES
-from rag.query_planner import QueryFilter, QueryPlan
+from rag.query_planner import NUMERIC_OPERATIONS, QueryFilter, QueryPlan
 from rag.table_store import INTERNAL_COLUMNS, TableStore
 from rag.text_normalize import (
     best_value_match,

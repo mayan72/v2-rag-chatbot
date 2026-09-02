@@ -12,6 +12,11 @@ document.addEventListener(
                 "uploadKnowledgeBtn"
             );
 
+        const clearButton =
+            document.getElementById(
+                "clearKnowledgeBtn"
+            );
+
         const loadingElement =
             document.getElementById(
                 "knowledgeLoading"
@@ -319,6 +324,138 @@ document.addEventListener(
 
             }
         );
+
+
+        if (clearButton) {
+
+            clearButton.addEventListener(
+                "click",
+                async function () {
+
+                    const confirmed = window.confirm(
+                        "Delete all stored embeddings and vector data?\n\n" +
+                        "New uploads will still be indexed the same way as now."
+                    );
+
+                    if (!confirmed) {
+                        return;
+                    }
+
+                    clearButton.disabled = true;
+
+                    if (uploadButton) {
+                        uploadButton.disabled = true;
+                    }
+
+                    if (fileInput) {
+                        fileInput.disabled = true;
+                    }
+
+                    loadingElement.style.display = "block";
+                    resultElement.innerHTML = "";
+                    statusElement.innerHTML =
+                        "Deleting embeddings and vector data...";
+
+                    try {
+
+                        const response = await fetch(
+                            "/knowledge/clear/",
+                            {
+                                method: "POST",
+                                headers: {
+                                    "X-CSRFToken": getCSRFToken(),
+                                },
+                            }
+                        );
+
+                        const result = await response.json();
+
+                        if (!response.ok || result.success === false) {
+                            throw new Error(
+                                result.message ||
+                                result.detail ||
+                                "Unable to delete vector data."
+                            );
+                        }
+
+                        const data = result.data || {};
+
+                        statusElement.innerHTML =
+                            "Vector data deleted.";
+
+                        resultElement.innerHTML = `
+
+                            <div class="alert alert-success">
+
+                                <strong>
+                                    Vector data deleted.
+                                </strong>
+
+                                <br>
+
+                                Embeddings removed:
+                                ${data.deleted_chunks || 0}
+
+                                <br>
+
+                                Tables removed:
+                                ${data.deleted_tables || 0}
+
+                            </div>
+
+                        `;
+
+                    } catch (error) {
+
+                        console.error(
+                            "Knowledge clear error:",
+                            error
+                        );
+
+                        statusElement.innerHTML =
+                            "Delete failed.";
+
+                        resultElement.innerHTML = `
+
+                            <div class="alert alert-danger">
+
+                                <strong>
+                                    Unable to delete vector data.
+                                </strong>
+
+                                <br>
+
+                                ${escapeHtml(error.message)}
+
+                            </div>
+
+                        `;
+
+                    } finally {
+
+                        clearButton.disabled = false;
+
+                        if (uploadButton) {
+                            uploadButton.disabled = false;
+                        }
+
+                        if (fileInput) {
+                            fileInput.disabled = false;
+                        }
+
+                        setTimeout(
+                            function () {
+                                loadingElement.style.display = "none";
+                            },
+                            1500
+                        );
+
+                    }
+
+                }
+            );
+
+        }
 
 
         // ======================================================

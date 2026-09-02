@@ -274,6 +274,29 @@ class TableStore:
 
             table_dir.rmdir()
 
+    def clear_all(self) -> int:
+        """
+        Remove every stored table. Does not change DATA_DIR files.
+        """
+
+        removed = 0
+
+        for schema_path in list(self.root.glob("*/schema.json")):
+            table_dir = schema_path.parent
+            try:
+                for child in table_dir.iterdir():
+                    if child.is_file():
+                        child.unlink()
+                table_dir.rmdir()
+                removed += 1
+            except Exception:
+                logger.exception(
+                    "Failed to remove table directory %s",
+                    table_dir,
+                )
+
+        return removed
+
     def list_schemas(self) -> List[dict]:
         """
         Return all logical table schemas.

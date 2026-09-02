@@ -305,6 +305,32 @@ def upload_knowledge(request):
         )
 
 
+@require_POST
+def clear_knowledge(request):
+
+    try:
+
+        result = fastapi_service.clear_knowledge()
+
+        return JsonResponse(
+            result
+        )
+
+    except Exception as exc:
+
+        logger.exception(
+            "Knowledge clear failed."
+        )
+
+        return JsonResponse(
+            {
+                "success": False,
+                "message": str(exc),
+            },
+            status=500,
+        )
+
+
 # ============================================================
 # Settings
 # ============================================================

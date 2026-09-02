@@ -375,6 +375,29 @@ async def upload_knowledge(
                 )
 
 
+@app.post("/knowledge/clear")
+def clear_knowledge():
+    """
+    Delete stored embeddings and uploaded table data.
+    Upload/index behavior is unchanged.
+    """
+
+    try:
+        result = knowledge_service.clear_all()
+        return {
+            "success": True,
+            "message": "Knowledge data cleared.",
+            "data": result,
+        }
+
+    except Exception as exc:
+        logger.exception("Knowledge clear failed.")
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
 @app.get("/settings")
 def settings():
 

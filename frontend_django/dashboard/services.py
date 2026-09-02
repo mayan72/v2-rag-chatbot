@@ -156,6 +156,17 @@ class FastAPIService:
 
         return response.json()
 
+    def clear_knowledge(self):
+
+        response = requests.post(
+            f"{self.base_url}/knowledge/clear",
+            timeout=self.TIMEOUT_CHAT,
+        )
+
+        response.raise_for_status()
+
+        return response.json()
+
     # ==========================================================
     # Metrics
     # ==========================================================

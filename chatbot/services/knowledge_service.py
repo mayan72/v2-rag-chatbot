@@ -39,6 +39,7 @@ from config import (
 from rag.table_store import TableStore
 from debug_trace import dbg
 from logger.console import qlog
+from services.vector_cleanup import delete_all_vector_ids
 
 logger = logging.getLogger(__name__)
 
@@ -441,6 +442,37 @@ class KnowledgeService:
             self.vector_db.delete(
                 ids=ids
             )
+
+    def clear_all(self) -> dict:
+        """
+        Remove stored embeddings and uploaded table files.
+
+        Does not change the upload/index path. New files are stored
+        with the same collection and table_store as before.
+        """
+
+        deleted_chunks = delete_all_vector_ids(self.vector_db)
+
+        persist = getattr(self.vector_db, "persist", None)
+        if callable(persist):
+            try:
+                persist()
+            except Exception:
+                logger.exception("Unable to persist Chroma after clear.")
+
+        deleted_tables = self.table_store.clear_all()
+
+        qlog(
+            "CLEAR",
+            chunks=deleted_chunks,
+            tables=deleted_tables,
+        )
+
+        return {
+            "deleted_chunks": deleted_chunks,
+            "deleted_tables": deleted_tables,
+            "status": "cleared",
+        }
 
     # ========================================================
     # Index

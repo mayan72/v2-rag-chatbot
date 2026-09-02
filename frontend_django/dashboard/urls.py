@@ -57,6 +57,11 @@ urlpatterns = [
         name="upload_knowledge",
     ),
     path(
+        "knowledge/clear/",
+        views.clear_knowledge,
+        name="clear_knowledge",
+    ),
+    path(
         "history/download/",
         views.download_question_answers,
         name="download_question_answers",

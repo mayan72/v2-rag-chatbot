@@ -14,6 +14,7 @@ from rag.query_planner import QueryPlanner
 from rag.structured_executor import StructuredExecutor, StructuredResult
 from rag.table_store import TableStore
 from debug_trace import dbg
+from logger.console import format_filters, qlog
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,8 @@ class HybridQAEngine:
         )
 
         if not schemas:
+            qlog("DOCUMENTS", available="-")
             dbg("HYBRID_SKIP", reason="no tables in table_store")
-        if not schemas:
             return None
 
         plan = self.planner.plan(
@@ -88,13 +89,32 @@ class HybridQAEngine:
             ],
         )
 
-        logger.info(
-            "Query plan | mode=%s | op=%s | filters=%s | confidence=%.2f | reason=%s",
-            plan.mode,
-            plan.operation,
-            [(item.column, item.op, item.value) for item in plan.filters],
-            plan.confidence,
-            plan.reason,
+        selected_document = ""
+        if plan.table_id:
+            for schema in schemas:
+                ids = {
+                    schema.get("document_id"),
+                    schema.get("table_id"),
+                }
+                if plan.table_id in ids:
+                    selected_document = (
+                        schema.get("document_name")
+                        or plan.table_id
+                    )
+                    break
+
+        qlog(
+            "QUERY TYPE",
+            type=plan.mode,
+            operation=plan.operation,
+            document=selected_document,
+            table=plan.table_id,
+            column=plan.target_column,
+            columns=plan.target_columns,
+            group_by=plan.group_by,
+            filters=format_filters(plan.filters),
+            confidence=plan.confidence,
+            reason=plan.reason,
         )
 
         # QueryPlanner emits mode="structured" for table calculations.

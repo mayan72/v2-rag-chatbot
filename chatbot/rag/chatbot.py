@@ -33,6 +33,12 @@ from rag.retriever import SemanticRetriever
 from rag.prompt_builder import PromptBuilder
 from rag.hybrid_qa import HybridQAEngine
 from debug_trace import dbg
+from logger.console import (
+    configure_logging,
+    document_names,
+    format_filters,
+    qlog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +50,7 @@ class RAGChatbot:
 
     def __init__(self):
 
-        logger.info("Initializing RAG Chatbot...")
+        configure_logging()
 
         # -------------------------------------------------------
         # Retriever
@@ -76,9 +82,7 @@ class RAGChatbot:
 
         self.cost_calculator = CostCalculator()
 
-        logger.info("Grok client initialized.")
-
-        logger.info("RAG Chatbot Ready.")
+        qlog("CHATBOT", status="ready")
 
         # ============================================================
     # Private Methods
@@ -95,12 +99,10 @@ class RAGChatbot:
         Execute the complete RAG pipeline.
         """
 
-        logger.info("=" * 80)
-        logger.info("New Question: %s", question)
-
         overall_start = time.perf_counter()
 
         request_id = str(uuid.uuid4())
+        qlog("QUESTION", text=question)
         dbg("ASK_START", request_id=request_id, question=question)
 
         # -------------------------------------------------------
@@ -159,6 +161,17 @@ class RAGChatbot:
                 "error": "",
             }
 
+            qlog(
+                "RESULT",
+                path="structured",
+                documents=structured.document_name,
+                operation=structured.operation,
+                rows=structured.row_count,
+                filters=format_filters(structured.filters),
+                answer=(structured.answer or "")[:240],
+                time_ms=round(total_time, 2),
+            )
+
             self.run_logger.log_success(log_payload)
 
             return {
@@ -225,6 +238,17 @@ class RAGChatbot:
                 "error": "",
             }
 
+            qlog(
+                "RESULT",
+                path="structured",
+                documents=structured.document_name,
+                operation=structured.operation,
+                rows=structured.row_count,
+                filters=format_filters(structured.filters),
+                answer=(structured.answer or "")[:240],
+                time_ms=round(total_time, 2),
+            )
+
             self.run_logger.log_success(log_payload)
 
             return {
@@ -270,12 +294,14 @@ class RAGChatbot:
             ],
         )
 
-        logger.info(
-            "Retrieval completed | "
-            "confidence=%.4f | "
-            "max_similarity=%.4f",
-            retrieval.confidence,
-            retrieval.max_similarity,
+        retrieved_docs = document_names(retrieval.chunks)
+        qlog(
+            "DOCUMENTS",
+            path="semantic RAG",
+            names=retrieved_docs,
+            chunks=len(retrieval.chunks),
+            max_similarity=round(retrieval.max_similarity, 4),
+            confidence=round(retrieval.confidence, 4),
         )
 
         # -------------------------------------------------------
@@ -292,6 +318,15 @@ class RAGChatbot:
             total_time = (
                 time.perf_counter() - overall_start
             ) * 1000
+
+            qlog(
+                "RESULT",
+                path="semantic RAG",
+                skipped_llm=True,
+                reason="below similarity threshold",
+                documents=retrieved_docs,
+                time_ms=round(total_time, 2),
+            )
 
             answer = (
                 "I don't have enough information "
@@ -432,18 +467,6 @@ class RAGChatbot:
         # Step 4 : LLM
         # -------------------------------------------------------
 
-        logger.info("=" * 80)
-        logger.info(
-            "QUESTION:\n%s",
-            question,
-        )
-        logger.info("=" * 80)
-        logger.info(
-            "CONTEXT SENT TO LLM:\n%s",
-            retrieval.context,
-        )
-        logger.info("=" * 80)
-
         provider_start = time.perf_counter()
 
         llm_result = self.llm.generate(
@@ -489,9 +512,14 @@ class RAGChatbot:
             time.perf_counter() - overall_start
         ) * 1000
 
-        logger.info(
-            "Pipeline Finished | Total Time=%.2f ms",
-            total_time,
+        qlog(
+            "RESULT",
+            path="semantic RAG",
+            documents=retrieved_docs,
+            provider=self.llm.provider,
+            model=self.llm.model,
+            answer=(llm_result.get("answer") or "")[:240],
+            time_ms=round(total_time, 2),
         )
 
         # -------------------------------------------------------

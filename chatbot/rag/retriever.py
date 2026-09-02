@@ -296,8 +296,6 @@ Content:
         RetrievalResult
         """
 
-        logger.info("Retrieving documents...")
-
         start = time.perf_counter()
 
         # -------------------------------------------------------
@@ -364,7 +362,7 @@ Content:
 
         sources = self._extract_sources(chunks)
 
-        logger.info(
+        logger.debug(
             "Retrieved %d chunks | "
             "Confidence=%.4f | "
             "Max Similarity=%.4f | "

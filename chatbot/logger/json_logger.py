@@ -57,7 +57,7 @@ class JsonLogger:
 
             fp.write("\n")
 
-        logger.info("JSON log written.")
+        logger.debug("JSON log written.")
 
     # ==========================================================
     # Failure

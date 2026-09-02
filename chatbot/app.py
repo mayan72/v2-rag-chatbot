@@ -31,14 +31,12 @@ from rag.chatbot import RAGChatbot
 from services.history_service import HistoryService
 from services.metrics_service import MetricsService
 from services.knowledge_service import KnowledgeService
+from logger.console import configure_logging, qlog
 # -------------------------------------------------------------------------
 # Logging
 # -------------------------------------------------------------------------
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +64,11 @@ async def lifespan(app: FastAPI):
 
     global chatbot
 
-    logger.info("Loading RAG Chatbot...")
+    qlog("STARTUP", status="loading chatbot")
 
     chatbot = RAGChatbot()
 
-    logger.info("RAG Chatbot Loaded Successfully.")
+    qlog("STARTUP", status="chatbot ready")
 
     yield
 
@@ -285,11 +283,10 @@ async def upload_knowledge(
 
         file_size = len(content)
 
-        logger.info(
-            "Knowledge upload received | "
-            "file=%s | size=%d bytes",
-            filename,
-            file_size,
+        qlog(
+            "UPLOAD",
+            file=filename,
+            size_bytes=file_size,
         )
 
         # ---------------------------------------------------------
@@ -322,19 +319,9 @@ async def upload_knowledge(
         # Index document
         # ---------------------------------------------------------
 
-        logger.info(
-            "Starting knowledge indexing | file=%s",
-            filename,
-        )
-
         result = knowledge_service.index_document(
             file_path=temp_path,
             filename=filename,
-        )
-
-        logger.info(
-            "Knowledge indexing completed | file=%s",
-            filename,
         )
 
         return {

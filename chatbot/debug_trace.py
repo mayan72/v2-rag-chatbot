@@ -1,30 +1,35 @@
 """
-Temporary RAG debugger.
+RAG debugger.
 
-Writes each pipeline step to:
-  - the server terminal
-  - chatbot/logs/rag_debug.log
+Writes each pipeline step as JSON to:
+  chatbot/logs/rag_debug.log
 
-Disable with:  RAG_DEBUG=0
+The terminal stays quiet unless RAG_DEBUG_VERBOSE=1.
+
+Disable file traces with: RAG_DEBUG=0
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import os
 from datetime import datetime
 from typing import Any
 
 from config import LOG_DIR
 
-logger = logging.getLogger("RAG_DEBUG")
-
 ENABLED = os.getenv("RAG_DEBUG", "1").strip().lower() not in {
     "0",
     "false",
     "off",
     "no",
+}
+
+VERBOSE = os.getenv("RAG_DEBUG_VERBOSE", "0").strip().lower() in {
+    "1",
+    "true",
+    "on",
+    "yes",
 }
 
 DEBUG_LOG = LOG_DIR / "rag_debug.log"
@@ -41,9 +46,10 @@ def dbg(step: str, **data: Any) -> None:
         **data,
     }
     line = json.dumps(payload, default=str, ensure_ascii=False)
-    logger.warning("RAG_DEBUG | %s", line)
     with DEBUG_LOG.open("a", encoding="utf-8") as handle:
         handle.write(line + "\n")
-    print("\n========== RAG_DEBUG |", step, "==========")
-    print(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
-    print("====================================\n", flush=True)
+
+    if VERBOSE:
+        print("\n========== RAG_DEBUG |", step, "==========")
+        print(json.dumps(payload, indent=2, default=str, ensure_ascii=False))
+        print("====================================\n", flush=True)

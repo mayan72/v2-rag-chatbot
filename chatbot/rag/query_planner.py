@@ -52,6 +52,7 @@ from rag.text_normalize import (
     best_value_match,
     normalize_text,
 )
+from logger.console import qlog
 
 logger = logging.getLogger(__name__)
 
@@ -287,13 +288,13 @@ class QueryPlanner:
             question
         )
 
-        logger.info(
-            "Structured intent | operation=%s | "
-            "structured=%s | confidence=%.2f | reason=%s",
-            intent.operation,
-            intent.structured,
-            intent.confidence,
-            intent.reason,
+        qlog(
+            "INTENT",
+            operation=intent.operation or "none",
+            structured=intent.structured,
+            intent=intent.intent,
+            confidence=intent.confidence,
+            reason=intent.reason,
         )
 
         # --------------------------------------------------------------
@@ -393,9 +394,13 @@ class QueryPlanner:
 
             if deterministic_plan.valid:
 
-                logger.info(
-                    "Deterministic structured plan accepted | %s",
-                    deterministic_plan.to_dict(),
+                qlog(
+                    "PLAN",
+                    source="deterministic",
+                    valid=True,
+                    operation=deterministic_plan.operation,
+                    table=deterministic_plan.table_id,
+                    column=deterministic_plan.target_column,
                 )
 
                 return deterministic_plan

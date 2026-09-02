@@ -217,7 +217,7 @@ class CSVLogger:
 
             writer.writerow(row)
 
-        logger.info(
+        logger.debug(
             "CSV log written | "
             "Provider=%s | "
             "Model=%s | "

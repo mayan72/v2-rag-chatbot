@@ -38,6 +38,7 @@ from config import (
 )
 from rag.table_store import TableStore
 from debug_trace import dbg
+from logger.console import qlog
 
 logger = logging.getLogger(__name__)
 
@@ -557,11 +558,11 @@ class KnowledgeService:
             documents=chunks
         )
 
-        logger.info(
-            "Document indexed successfully | "
-            "document=%s | chunks=%d",
-            filename,
-            len(chunks),
+        qlog(
+            "INDEX",
+            document=filename,
+            chunks=len(chunks),
+            type=extension,
         )
 
         result = {

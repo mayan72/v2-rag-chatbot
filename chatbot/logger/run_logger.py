@@ -60,7 +60,7 @@ class RunLogger:
 
         self.csv_logger.log(payload)
 
-        logger.info("Request logged successfully.")
+        logger.debug("Request logged successfully.")
 
     # ============================================================
     # Failure Logging

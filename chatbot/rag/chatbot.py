@@ -20,7 +20,7 @@ import logging
 import time
 from datetime import datetime
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from logger.cost_calculator import CostCalculator
 from logger.run_logger import RunLogger
 from config import (
@@ -32,6 +32,7 @@ from llm.llm_factory import LLMFactory
 from rag.retriever import SemanticRetriever
 from rag.prompt_builder import PromptBuilder
 from rag.hybrid_qa import HybridQAEngine
+from rag.agentic_controller import AgenticController
 from debug_trace import dbg
 from logger.console import (
     configure_logging,
@@ -79,6 +80,7 @@ class RAGChatbot:
         # )
         self.llm = LLMFactory.create()
         self.hybrid_qa = HybridQAEngine(llm=self.llm)
+        self.agent = AgenticController()
 
         self.cost_calculator = CostCalculator()
 
@@ -94,6 +96,7 @@ class RAGChatbot:
     def ask(
         self,
         question: str,
+        conversation_id: str = "",
     ) -> Dict[str, Any]:
         """
         Execute the complete RAG pipeline.
@@ -105,11 +108,58 @@ class RAGChatbot:
         qlog("QUESTION", text=question)
         dbg("ASK_START", request_id=request_id, question=question)
 
+        prep = self.agent.prepare(
+            question=question,
+            conversation_id=conversation_id,
+            request_id=request_id,
+        )
+        if prep.early_response:
+            total_time = (time.perf_counter() - overall_start) * 1000
+            prep.early_response["total_time_ms"] = round(total_time, 2)
+            self._log_agent_event(prep, prep.early_response, request_id)
+            return prep.early_response
+
+        lookup_question = prep.resolved_query or question
+
+        if prep.explicit_trace and prep.explicit_trace.verified:
+            total_time = (time.perf_counter() - overall_start) * 1000
+            trace = prep.explicit_trace
+            answer = (
+                f"The value increased from {trace.inputs['old_value']} to "
+                f"{trace.inputs['new_value']}, representing a "
+                f"{round(trace.result, 2)}% change."
+            )
+            if trace.inputs["new_value"] < trace.inputs["old_value"]:
+                answer = (
+                    f"The value decreased from {trace.inputs['old_value']} to "
+                    f"{trace.inputs['new_value']}, representing a "
+                    f"{round(trace.result, 2)}% change."
+                )
+            result = self.agent._base_result(
+                prep,
+                request_id,
+                answer=answer,
+                status="SUCCESS",
+                confidence=1.0,
+                extra={
+                    "formula": trace.formula,
+                    "calculation_result": trace.result,
+                    "calculation_verified": True,
+                    "numerical_query": True,
+                    "provider": "calculator",
+                    "model": "deterministic",
+                    "total_time_ms": round(total_time, 2),
+                },
+            )
+            self.agent.remember_answer(prep, answer)
+            self._log_agent_event(prep, result, request_id)
+            return result
+
         # -------------------------------------------------------
         # Step 0 : Structured table QA (counts / sums / filters)
         # -------------------------------------------------------
 
-        structured = self.hybrid_qa.answer(question)
+        structured = self.hybrid_qa.answer(lookup_question)
         dbg(
             "STEP0_STRUCTURED_RESULT",
             request_id=request_id,
@@ -173,33 +223,38 @@ class RAGChatbot:
             )
 
             self.run_logger.log_success(log_payload)
-
-            return {
-                "answer": structured.answer,
-                "confidence": 1.0,
-                "provider": "structured",
-                "model": "table-engine",
-                "sources": structured.sources or [],
-                "retrieval_time_ms": 0,
-                "llm_time_ms": 0,
-                "llm_provider_latency_ms": 0,
-                "total_time_ms": round(total_time, 2),
-                "chunks_retrieved": len(structured.sources or []),
-                "context_length": 0,
-                "retrieval_threshold": SIMILARITY_THRESHOLD,
-                "top_k": TOP_K_RESULTS,
-                "temperature": LLM_TEMPERATURE,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
-                "cost": 0,
-            }
+            self.agent.remember_answer(prep, structured.answer)
+            return self._with_agent_fields(
+                {
+                    "answer": structured.answer,
+                    "confidence": 1.0,
+                    "provider": "structured",
+                    "model": "table-engine",
+                    "sources": structured.sources or [],
+                    "retrieval_time_ms": 0,
+                    "llm_time_ms": 0,
+                    "llm_provider_latency_ms": 0,
+                    "total_time_ms": round(total_time, 2),
+                    "chunks_retrieved": len(structured.sources or []),
+                    "context_length": 0,
+                    "retrieval_threshold": SIMILARITY_THRESHOLD,
+                    "top_k": TOP_K_RESULTS,
+                    "temperature": LLM_TEMPERATURE,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "cost": 0,
+                },
+                prep,
+                request_id,
+                status="SUCCESS",
+            )
 
         # -------------------------------------------------------
         # Step 0 : Structured table QA (counts / sums / filters)
         # -------------------------------------------------------
 
-        structured = self.hybrid_qa.answer(question)
+        structured = self.hybrid_qa.answer(lookup_question)
 
         if structured and structured.matched:
 
@@ -250,33 +305,38 @@ class RAGChatbot:
             )
 
             self.run_logger.log_success(log_payload)
-
-            return {
-                "answer": structured.answer,
-                "confidence": 1.0,
-                "provider": "structured",
-                "model": "table-engine",
-                "sources": structured.sources or [],
-                "retrieval_time_ms": 0,
-                "llm_time_ms": 0,
-                "llm_provider_latency_ms": 0,
-                "total_time_ms": round(total_time, 2),
-                "chunks_retrieved": len(structured.sources or []),
-                "context_length": 0,
-                "retrieval_threshold": SIMILARITY_THRESHOLD,
-                "top_k": TOP_K_RESULTS,
-                "temperature": LLM_TEMPERATURE,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
-                "cost": 0,
-            }
+            self.agent.remember_answer(prep, structured.answer)
+            return self._with_agent_fields(
+                {
+                    "answer": structured.answer,
+                    "confidence": 1.0,
+                    "provider": "structured",
+                    "model": "table-engine",
+                    "sources": structured.sources or [],
+                    "retrieval_time_ms": 0,
+                    "llm_time_ms": 0,
+                    "llm_provider_latency_ms": 0,
+                    "total_time_ms": round(total_time, 2),
+                    "chunks_retrieved": len(structured.sources or []),
+                    "context_length": 0,
+                    "retrieval_threshold": SIMILARITY_THRESHOLD,
+                    "top_k": TOP_K_RESULTS,
+                    "temperature": LLM_TEMPERATURE,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "cost": 0,
+                },
+                prep,
+                request_id,
+                status="SUCCESS",
+            )
 
         # -------------------------------------------------------
         # Step 1 : Retrieve
         # -------------------------------------------------------
 
-        retrieval = self.retriever.retrieve(question)
+        retrieval = self.retriever.retrieve(lookup_question)
         dbg(
             "STEP1_RAG_RETRIEVAL",
             request_id=request_id,
@@ -303,6 +363,44 @@ class RAGChatbot:
             max_similarity=round(retrieval.max_similarity, 4),
             confidence=round(retrieval.confidence, 4),
         )
+
+        post = self.agent.after_retrieval(
+            prep=prep,
+            chunks=retrieval.chunks,
+            request_id=request_id,
+            retrieval_attempts=1,
+        )
+        if post.get("retry"):
+            retry_query = " ".join(
+                part for part in (
+                    prep.analysis.metric,
+                    prep.analysis.start_period,
+                    prep.analysis.end_period,
+                    lookup_question,
+                ) if part
+            )
+            retrieval = self.retriever.retrieve(retry_query)
+            post = self.agent.after_retrieval(
+                prep=prep,
+                chunks=retrieval.chunks,
+                request_id=request_id,
+                retrieval_attempts=2,
+            )
+        if post.get("chunks"):
+            retrieval.chunks = post["chunks"]
+        if post.get("early_response"):
+            early = post["early_response"]
+            early["sources"] = retrieval.sources or []
+            early["retrieval_time_ms"] = retrieval.retrieval_time_ms
+            early["chunks_retrieved"] = len(retrieval.chunks)
+            early["total_time_ms"] = round(
+                (time.perf_counter() - overall_start) * 1000, 2
+            )
+            self._log_agent_event(prep, early, request_id)
+            return early
+
+        calc_trace = post.get("trace")
+        finding = post.get("finding")
 
         # -------------------------------------------------------
         # Step 2 : Similarity Check
@@ -406,7 +504,8 @@ class RAGChatbot:
                 log_payload
             )
 
-            return {
+            return self._with_agent_fields(
+                {
 
                 "answer": answer,
 
@@ -418,6 +517,9 @@ class RAGChatbot:
 
                 "model":
                     self.llm.model,
+
+                "sources":
+                    retrieval.sources or [],
 
                 "retrieval_time_ms":
                     retrieval.retrieval_time_ms,
@@ -452,15 +554,20 @@ class RAGChatbot:
 
                 "cost": 0,
 
-            }
+                },
+                prep,
+                request_id,
+                status="INSUFFICIENT_EVIDENCE",
+            )
 
         # -------------------------------------------------------
         # Step 3 : Prompt
         # -------------------------------------------------------
 
         messages = self.prompt_builder.build(
-            question=question,
+            question=lookup_question,
             context=retrieval.context,
+            calculation_note=self.agent.calculation_note(calc_trace),
         )
 
         # -------------------------------------------------------
@@ -522,6 +629,19 @@ class RAGChatbot:
             time_ms=round(total_time, 2),
         )
 
+        evidence_text = retrieval.context or ""
+        finalized = self.agent.finalize_answer(
+            answer=llm_result["answer"],
+            evidence_text=evidence_text,
+            trace=calc_trace,
+            finding=finding,
+            retrieval_confidence=retrieval.confidence,
+        )
+        final_answer = finalized["answer"]
+        final_confidence = finalized["confidence"]
+        final_status = finalized["status"]
+        self.agent.remember_answer(prep, final_answer)
+
         # -------------------------------------------------------
         # Step 7 : Logging
         # -------------------------------------------------------
@@ -543,13 +663,19 @@ class RAGChatbot:
                 self.llm.model,
 
             "question":
-                question,
+                lookup_question,
+
+            "original_question":
+                prep.original_question,
+
+            "resolved_question":
+                prep.resolved_query,
 
             "answer":
-                llm_result["answer"],
+                final_answer,
 
             "confidence":
-                retrieval.confidence,
+                final_confidence,
 
             "max_similarity":
                 retrieval.max_similarity,
@@ -615,6 +741,14 @@ class RAGChatbot:
                 retrieval.sources,
 
             "error": "",
+            "status": final_status,
+            "conversation_id": prep.conversation_id,
+            "intent": prep.analysis.intent,
+            "formula": getattr(calc_trace, "formula", None),
+            "calculation_result": getattr(calc_trace, "result", None),
+            "calculation_verified": getattr(calc_trace, "verified", None),
+            "answer_verified": finalized.get("answer_verified"),
+            "evidence_completeness": getattr(finding, "completeness", None),
         }
 
         self.run_logger.log_success(
@@ -625,13 +759,14 @@ class RAGChatbot:
         # Step 8 : Return
         # -------------------------------------------------------
 
-        return {
+        return self._with_agent_fields(
+            {
 
             "answer":
-                llm_result["answer"],
+                final_answer,
 
             "confidence":
-                retrieval.confidence,
+                final_confidence,
 
             "provider":
                 self.llm.provider,
@@ -690,4 +825,84 @@ class RAGChatbot:
             "cost_breakdown":
                 cost,
 
+            },
+            prep,
+            request_id,
+            status=final_status,
+            extra={
+                "formula": getattr(calc_trace, "formula", None),
+                "calculation_result": getattr(calc_trace, "result", None),
+                "calculation_verified": getattr(calc_trace, "verified", None),
+                "answer_verified": finalized.get("answer_verified"),
+                "evidence_completeness": getattr(finding, "completeness", None),
+                "reranking_used": True,
+            },
+        )
+
+    def _with_agent_fields(
+        self,
+        result: Dict[str, Any],
+        prep,
+        request_id: str,
+        status: str = "SUCCESS",
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        result.setdefault("sources", [])
+        result.update(
+            {
+                "request_id": request_id,
+                "conversation_id": prep.conversation_id,
+                "original_question": prep.original_question,
+                "resolved_question": prep.resolved_query,
+                "intent": prep.analysis.intent,
+                "is_ambiguous": prep.analysis.is_ambiguous,
+                "clarification_required": False,
+                "clarification_question": None,
+                "clarification_options": [],
+                "status": status,
+                "numerical_query": prep.analysis.numerical,
+                "calculation_required": prep.analysis.requires_calculation,
+            }
+        )
+        if extra:
+            result.update(extra)
+        return result
+
+    def _log_agent_event(self, prep, result: Dict[str, Any], request_id: str) -> None:
+        payload = {
+            "status": result.get("status", "SUCCESS"),
+            "timestamp": datetime.now().isoformat(),
+            "request_id": request_id,
+            "conversation_id": prep.conversation_id,
+            "provider": result.get("provider", ""),
+            "model": result.get("model", ""),
+            "question": prep.original_question,
+            "original_question": prep.original_question,
+            "resolved_question": prep.resolved_query,
+            "answer": result.get("answer", ""),
+            "confidence": result.get("confidence", 0),
+            "max_similarity": 0,
+            "should_answer": not result.get("clarification_required"),
+            "chunks_retrieved": result.get("chunks_retrieved", 0),
+            "context_length": result.get("context_length", 0),
+            "retrieval_time_ms": result.get("retrieval_time_ms", 0),
+            "llm_time_ms": result.get("llm_time_ms", 0),
+            "llm_provider_latency_ms": result.get("llm_provider_latency_ms", 0),
+            "total_time_ms": result.get("total_time_ms", 0),
+            "retrieval_threshold": SIMILARITY_THRESHOLD,
+            "top_k": TOP_K_RESULTS,
+            "temperature": LLM_TEMPERATURE,
+            "input_tokens": result.get("input_tokens", 0),
+            "output_tokens": result.get("output_tokens", 0),
+            "total_tokens": result.get("total_tokens", 0),
+            "input_cost": 0,
+            "output_cost": 0,
+            "embedding_cost": 0,
+            "total_cost": result.get("cost", 0),
+            "sources": result.get("sources", []),
+            "error": "",
+            "intent": prep.analysis.intent,
+            "clarification_required": result.get("clarification_required", False),
+            "clarification_question": result.get("clarification_question"),
         }
+        self.run_logger.log_success(payload)

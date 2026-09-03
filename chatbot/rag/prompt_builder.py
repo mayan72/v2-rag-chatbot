@@ -67,11 +67,18 @@ STRICT RULES
 17. The retrieved context is the ONLY source of truth.
 """
 
+    CALCULATION_RULES = """
+18. If a VERIFIED CALCULATION block is provided, use that result.
+    Do not recompute the number. Explain it in natural language.
+    Never invent missing inputs.
+"""
+
     @classmethod
     def build(
         cls,
         question: str,
         context: str,
+        calculation_note: str = "",
     ) -> List[dict]:
         """
         Returns messages compatible with OpenAI/xAI chat completions.
@@ -90,12 +97,24 @@ STRICT RULES
         ]
         """
 
+        calculation_block = ""
+        system = cls.SYSTEM_PROMPT.strip()
+        if calculation_note:
+            system = system + "\n" + cls.CALCULATION_RULES.strip()
+            calculation_block = f"""
+
+VERIFIED CALCULATION
+====================
+{calculation_note}
+Use this result. Do not recalculate.
+"""
+
         user_prompt = f"""
 CONTEXT
 ========
 
 {context}
-
+{calculation_block}
 ========================================
 
 QUESTION
@@ -110,7 +129,7 @@ Answer using ONLY the context above.
         return [
             {
                 "role": "system",
-                "content": cls.SYSTEM_PROMPT.strip(),
+                "content": system,
             },
             {
                 "role": "user",

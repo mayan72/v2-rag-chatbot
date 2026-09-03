@@ -53,6 +53,7 @@ class FastAPIService:
     def chat(
         self,
         question: str,
+        conversation_id: str = "",
     ):
 
         logger.info(
@@ -65,6 +66,7 @@ class FastAPIService:
 
             json={
                 "question": question,
+                "conversation_id": conversation_id,
             },
 
             timeout=self.TIMEOUT_CHAT,

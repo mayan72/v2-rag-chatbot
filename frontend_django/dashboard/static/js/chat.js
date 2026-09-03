@@ -27,11 +27,35 @@ document.addEventListener("DOMContentLoaded", function () {
     const tokensElement =
         document.getElementById("tokens");
 
-    const costElement =
-        document.getElementById("cost");
+        const costElement =
+            document.getElementById("cost");
 
-    const loadingElement =
-        document.getElementById("loading");
+        const loadingElement =
+            document.getElementById("loading");
+
+        const clarificationPanel =
+            document.getElementById("clarificationPanel");
+
+        const clarificationText =
+            document.getElementById("clarificationText");
+
+        const clarificationOptions =
+            document.getElementById("clarificationOptions");
+
+        const newConversationBtn =
+            document.getElementById("newConversationBtn");
+
+        const responseStatus =
+            document.getElementById("responseStatus");
+
+        const runStatus =
+            document.getElementById("runStatus");
+
+        const runIntent =
+            document.getElementById("runIntent");
+
+        const resolvedQuery =
+            document.getElementById("resolvedQuery");
 
     const webSearchSection =
         document.getElementById("webSearchSection");
@@ -84,6 +108,44 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         return "";
+    }
+
+
+    function getConversationId() {
+        const key = "rag_conversation_id";
+        let value = sessionStorage.getItem(key);
+        if (!value) {
+            value = (
+                crypto.randomUUID &&
+                crypto.randomUUID()
+            ) || String(Date.now());
+            sessionStorage.setItem(key, value);
+        }
+        return value;
+    }
+
+
+    function resetConversation() {
+        sessionStorage.removeItem("rag_conversation_id");
+        getConversationId();
+        if (clarificationPanel) {
+            clarificationPanel.style.display = "none";
+        }
+        if (clarificationOptions) {
+            clarificationOptions.innerHTML = "";
+        }
+        if (questionInput) {
+            questionInput.placeholder =
+                "Example: What is happening at the Qatalum smelter?";
+        }
+    }
+
+
+    if (newConversationBtn) {
+        newConversationBtn.addEventListener(
+            "click",
+            resetConversation
+        );
     }
 
 
@@ -163,6 +225,22 @@ document.addEventListener("DOMContentLoaded", function () {
 
         costElement.innerHTML = "-";
 
+        if (runStatus) {
+            runStatus.innerHTML = "-";
+        }
+        if (runIntent) {
+            runIntent.innerHTML = "-";
+        }
+        if (resolvedQuery) {
+            resolvedQuery.innerHTML = "-";
+        }
+        if (responseStatus) {
+            responseStatus.innerHTML = "";
+        }
+        if (clarificationPanel) {
+            clarificationPanel.style.display = "none";
+        }
+
 
         sourcesElement.innerHTML =
             "Retrieving sources...";
@@ -191,7 +269,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     body: JSON.stringify({
 
-                        question: question
+                        question: question,
+                        conversation_id: getConversationId()
 
                     }),
 
@@ -275,6 +354,69 @@ answerElement.innerHTML =
     "No answer returned.";
 
 
+const statusValue =
+    (data.status || "SUCCESS").toString();
+
+const clarificationNeeded =
+    data.clarification_required === true ||
+    statusValue === "CLARIFICATION_REQUIRED";
+
+if (runStatus) {
+    runStatus.innerHTML = statusValue;
+}
+if (runIntent) {
+    runIntent.innerHTML = data.intent || "-";
+}
+if (resolvedQuery) {
+    resolvedQuery.innerHTML =
+        data.resolved_question || question;
+}
+
+if (responseStatus) {
+    let pillClass = "success";
+    if (clarificationNeeded) {
+        pillClass = "clarify";
+    } else if (
+        statusValue !== "SUCCESS"
+    ) {
+        pillClass = "warn";
+    }
+    responseStatus.innerHTML =
+        `<span class="status-pill ${pillClass}">${escapeHtml(statusValue)}</span>`;
+}
+
+if (clarificationNeeded && clarificationPanel) {
+    clarificationPanel.style.display = "block";
+    if (clarificationText) {
+        clarificationText.innerHTML =
+            escapeHtml(
+                data.clarification_question ||
+                answer
+            );
+    }
+    if (clarificationOptions) {
+        clarificationOptions.innerHTML = "";
+        const options = data.clarification_options || [];
+        options.forEach(function (option) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "clarification-chip";
+            button.innerText = option;
+            button.addEventListener("click", function () {
+                questionInput.value = option;
+                askQuestion();
+            });
+            clarificationOptions.appendChild(button);
+        });
+    }
+    questionInput.placeholder =
+        "Type your clarification or tap an option above";
+    questionInput.value = "";
+} else if (clarificationPanel) {
+    clarificationPanel.style.display = "none";
+}
+
+
 // ==========================================================
 // Check whether RAG has enough information
 // ==========================================================
@@ -283,8 +425,12 @@ const noKnowledgeMessage =
     "I don't have enough information in my knowledge base.";
 
 const hasKnowledge =
+    !clarificationNeeded &&
     answer.toLowerCase() !==
-    noKnowledgeMessage.toLowerCase();
+    noKnowledgeMessage.toLowerCase() &&
+    !answer.toLowerCase().includes("couldn't find") &&
+    !answer.toLowerCase().includes("can't reliably") &&
+    statusValue === "SUCCESS";
 
 
 // ==========================================================

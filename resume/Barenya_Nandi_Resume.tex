@@ -1,0 +1,236 @@
+\documentclass[10pt,a4paper]{article}
+
+% ================= PACKAGES =================
+\usepackage[a4paper,margin=0.55in]{geometry}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage{fontawesome5}
+
+% ================= PAGE STYLE =================
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+
+% ================= SECTION FORMAT =================
+\titleformat{\section}
+{\large\bfseries}
+{}
+{0em}
+{}[\titlerule]
+
+\titlespacing{\section}{0pt}{6pt}{3pt}
+
+% ================= LIST SETTINGS =================
+\setlist[itemize]{
+    leftmargin=14pt,
+    itemsep=1pt,
+    topsep=1pt,
+    parsep=0pt,
+    partopsep=0pt
+}
+
+% ================= CUSTOM COMMANDS =================
+\newcommand{\resumeItem}[1]{
+    \item \small{#1}
+}
+
+\newcommand{\resumeSubheading}[4]{
+    \textbf{#1} \hfill #2\\
+    {\small #3} \hfill {\small #4}\\[-2pt]
+}
+
+\newcommand{\projectHeading}[2]{
+    \textbf{#1} \hfill {\small #2}\\[-2pt]
+}
+
+% ================= DOCUMENT =================
+\begin{document}
+
+% =========================================================
+% HEADER
+% =========================================================
+
+\begin{center}
+
+{\Huge \textbf{Barenya Nandi}}
+
+\vspace{5pt}
+
+\small
+\faEnvelope \hspace{2pt}
+\href{mailto:nandibarenya08@gmail.com}{nandibarenya08@gmail.com}
+\hspace{12pt}
+\faPhone \hspace{2pt}
++91-8885495640 / +91-8240540711
+\hspace{12pt}
+\faLinkedin \hspace{2pt}
+\href{https://www.linkedin.com/in/barenya-nandi-243a2a278/}
+{LinkedIn}
+
+\end{center}
+
+\vspace{-4pt}
+
+
+% =========================================================
+% PROFESSIONAL SUMMARY
+% =========================================================
+
+\section{Professional Summary}
+
+\small
+Data Engineer with 3 years of experience in SQL, ETL pipeline development, data modeling, and analytics. Skilled in building scalable data pipelines and lakehouse solutions using Databricks, Apache Spark, and Delta Lake, with expertise in data quality and governance. Proven track record of delivering analytics-ready datasets and business insights through dimensional modeling and optimized data workflows.
+
+% =========================================================
+% TECHNICAL SKILLS
+% =========================================================
+
+\section{Technical Skills}
+
+\textbf{Data Engineering:}
+SQL, Databricks, PySpark, ETL/ELT, Data Pipelines, Data Warehousing, Data Lakehouse
+
+\vspace{2pt}
+
+\textbf{Data Modeling:}
+Dimensional Modeling, Star Schema, Data Integration
+
+\vspace{2pt}
+
+\textbf{Data Analytics:}
+Python, Pandas, NumPy, Data Cleaning, Data Transformation, Data Validation, KPI Analysis
+
+\vspace{2pt}
+
+\textbf{Cloud and BI:}
+Snowflake, Azure Data Factory, Azure Blob Storage, Power BI, Microsoft Excel
+
+
+
+% =========================================================
+% PROFESSIONAL EXPERIENCE
+% =========================================================
+
+\section{Professional Experience}
+
+\vspace{4pt}
+
+\resumeSubheading
+{Associate Software Engineer}
+{Jul 2023 -- Present}
+{Prolifics Corporation Limited}
+{India}
+
+\begin{itemize}
+
+\resumeItem{Developed SQL-based data workflows, reporting solutions, and enterprise applications to support business and operational reporting.}
+
+\resumeItem{Developed SQL queries and data transformation logic to extract, validate, and prepare structured business data for reporting and analysis.}
+
+\resumeItem{Performed data validation, quality checks, and root-cause analysis to identify data issues and improve reporting accuracy.}
+
+\resumeItem{Collaborated with stakeholders to define business requirements, business rules, and KPI logic for data and reporting solutions.}
+
+\end{itemize}
+
+
+
+% =========================================================
+% PROJECTS
+% =========================================================
+
+\section{Projects}
+
+\vspace{4pt}
+
+% ================= PROJECT 1 =================
+
+\projectHeading
+{Databricks Data Lakehouse Project}
+{Databricks | PySpark | Spark SQL | Delta Lake | Unity Catalog}
+
+\begin{itemize}
+
+\resumeItem{Built a data lakehouse solution on Databricks using Medallion Architecture, with Bronze, Silver, and Gold layers for data ingestion, transformation, validation, and analytics.}
+
+\resumeItem{Developed PySpark and Spark SQL transformations for data extraction, cleansing, standardization, filtering, and large-scale data processing.}
+
+\resumeItem{Worked with Delta Lake tables and dimensional modeling concepts to create reliable, analytics-ready datasets for reporting and analytical workloads.}
+
+\resumeItem{Applied Unity Catalog concepts to organize and govern data assets within the Databricks environment.}
+
+\vspace{4pt}
+
+\end{itemize}
+
+
+% ================= PROJECT 2 =================
+
+\projectHeading
+{SQL Data Warehouse and Analytics Project}
+{SQL Server | SQL | ETL | Data Modeling | Git}
+
+\begin{itemize}
+
+\resumeItem{Built an end-to-end SQL data warehouse integrating CRM and ERP source data using Bronze, Silver, and Gold layers.}
+
+\resumeItem{Designed ETL workflows to extract, load, cleanse, standardize, and transform raw CSV data into analytics-ready datasets using SQL.}
+
+\resumeItem{Developed SQL DDL scripts, bulk-loading processes, stored procedures, and data transformation logic for structured data ingestion and processing.}
+
+\resumeItem{Implemented dimensional modeling with fact and dimension tables, a Star Schema, data quality checks, and full and incremental loading.}
+
+\vspace{4pt}
+
+\end{itemize}
+
+
+% ================= PROJECT 3 =================
+
+\projectHeading
+{ESG Analytics and Sustainability Reporting Platform}
+{Azure Data Factory | Snowflake | SQL | Power BI}
+
+\begin{itemize}
+
+\resumeItem{Supported an ESG analytics platform by integrating sustainability data through Azure Data Factory and Azure Blob Storage into Snowflake.}
+
+\resumeItem{Developed SQL transformations, analytical views, business rules, and reporting datasets to support ESG KPI analysis and reporting.}
+
+\resumeItem{Developed Power BI dashboards, performed data validation and quality checks, and collaborated with stakeholders on KPI requirements and reporting logic.}
+
+\vspace{4pt}
+
+\end{itemize}
+
+
+
+
+
+% =========================================================
+% EDUCATION
+% =========================================================
+
+\section{Education}
+
+\textbf{B.Tech in Computer Science and Engineering}
+\hfill 2019 -- 2023\\
+Netaji Subhash Engineering College, Kolkata
+\hfill CGPA: 9.12
+
+% =========================================================
+% CERTIFICATIONS
+% =========================================================
+
+\section{Certifications}
+
+\begin{itemize}
+
+\resumeItem{Databricks Fundamentals Accreditation -- Databricks Academy, 2026}
+
+\resumeItem{PG Certification in Data Analytics with GenAI -- E\&ICT Academy, IIT Guwahati \& Coding Ninjas, 2025}
+
+\end{itemize}
+
+\end{document}

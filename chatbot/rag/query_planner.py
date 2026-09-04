@@ -992,6 +992,43 @@ class QueryPlanner:
             )
         )
 
+        if (
+            operation in {
+                "sum",
+                "avg",
+                "count",
+                "min",
+                "max",
+                "median",
+            }
+            and not filters
+            and self._question_has_unresolved_subset(
+                question=question,
+                columns=columns,
+            )
+        ):
+            return QueryPlan(
+                mode="structured",
+                operation=operation,
+                table_id=(
+                    best_schema.get("table_id")
+                    or best_schema.get("document_id")
+                ),
+                target_column=target_column,
+                confidence=0.0,
+                reason=(
+                    "question implies a subset filter "
+                    "that could not be validated"
+                ),
+                valid=False,
+                intent=intent.intent,
+                validation_errors=[
+                    "Could not safely apply the requested "
+                    "category or value filter. Refusing to "
+                    "return an unfiltered total."
+                ],
+            )
+
         # --------------------------------------------------------------
         # Ranking metadata
         # --------------------------------------------------------------
@@ -1578,6 +1615,8 @@ class QueryPlanner:
             r"\b([a-z][a-z0-9 _-]{1,40})\s*=\s*([a-z0-9 _./%-]+)",
             r"\bfor\s+([a-z][a-z0-9 _-]{1,40})\s+in\s+([a-z0-9 _./%-]+)",
             r"\bin\s+([a-z][a-z0-9 _-]{1,40})\s+([a-z0-9 _./%-]+)",
+            # "category of furniture" / "category is furniture"
+            r"\b(category|categories|type|types|segment|region|department|status|class)\s+(?:of|is|=)\s+([a-z0-9][a-z0-9 _./%-]*)",
         ]
 
         for pattern in equality_patterns:
@@ -1597,6 +1636,11 @@ class QueryPlanner:
                     match.group(2)
                     .strip()
                 )
+                value_text = re.split(
+                    r"\b(?:for|in|and|with)\b",
+                    value_text,
+                    maxsplit=1,
+                )[0].strip()
 
                 column = (
                     self._resolve_column_from_text(
@@ -1608,43 +1652,262 @@ class QueryPlanner:
                 if not column:
                     continue
 
-                # Resolve the actual value only if
-                # schema sample values support it.
-                value_result = (
-                    self._resolve_filter_value(
-                        column=column,
-                        requested_value=value_text,
-                        columns=columns,
-                    )
+                query_filter = self._make_equality_filter(
+                    column=column,
+                    requested_value=value_text,
+                    columns=columns,
                 )
+                if query_filter is not None:
+                    filters.append(query_filter)
 
-                if value_result is None:
-                    # IMPORTANT:
-                    # Do not silently create a filter from
-                    # an unknown value.
-                    continue
-
-                matched_value, score = (
-                    value_result
-                )
-
-                filters.append(
-                    QueryFilter(
-                        column=column,
-                        op="eq",
-                        value=matched_value,
-                        score=score,
-                        validated=(
-                            score
-                            >= self.value_min_score
-                        ),
-                        requested_value=value_text,
-                    )
-                )
+        filters.extend(
+            self._extract_value_then_column_filters(
+                question=question,
+                columns=columns,
+            )
+        )
+        filters.extend(
+            self._extract_trailing_for_filters(
+                question=question,
+                columns=columns,
+                existing=filters,
+            )
+        )
+        filters.extend(
+            self._extract_mentioned_value_filters(
+                question=question,
+                columns=columns,
+                existing=filters,
+            )
+        )
 
         return self._dedupe_filters(
             filters
         )
+
+    def _make_equality_filter(
+        self,
+        column: str,
+        requested_value: str,
+        columns: List[dict],
+    ) -> Optional[QueryFilter]:
+
+        requested_value = (requested_value or "").strip()
+        if not requested_value:
+            return None
+
+        value_result = (
+            self._resolve_filter_value(
+                column=column,
+                requested_value=requested_value,
+                columns=columns,
+            )
+        )
+        if value_result is None:
+            return None
+
+        matched_value, score = value_result
+        return QueryFilter(
+            column=column,
+            op="eq",
+            value=matched_value,
+            score=score,
+            validated=score >= self.value_min_score,
+            requested_value=requested_value,
+        )
+
+    def _extract_value_then_column_filters(
+        self,
+        question: str,
+        columns: List[dict],
+    ) -> List[QueryFilter]:
+        """
+        Phrases like:
+          furniture category
+          of furniture category
+          furniture type
+        """
+
+        normalized = normalize_text(question)
+        filters = []
+        patterns = [
+            r"\bof\s+(?:the\s+)?([a-z0-9][a-z0-9 _./&-]{0,40}?)\s+(category|categories|type|types|segment|region|department|status|class)\b",
+            r"\b([a-z0-9][a-z0-9 _./&-]{0,40}?)\s+(category|categories|type|types|segment|region|department|status|class)\b",
+        ]
+        for pattern in patterns:
+            for match in re.finditer(pattern, normalized, flags=re.IGNORECASE):
+                value_text = match.group(1).strip()
+                column_text = match.group(2).strip()
+                column = self._resolve_column_from_text(
+                    column_text,
+                    columns,
+                )
+                if not column:
+                    continue
+                query_filter = self._make_equality_filter(
+                    column=column,
+                    requested_value=value_text,
+                    columns=columns,
+                )
+                if query_filter is not None:
+                    filters.append(query_filter)
+        return filters
+
+    def _extract_trailing_for_filters(
+        self,
+        question: str,
+        columns: List[dict],
+        existing: List[QueryFilter],
+    ) -> List[QueryFilter]:
+        """
+        'for North' / 'for Almunium case settlement'
+        """
+
+        normalized = normalize_text(question)
+        match = re.search(
+            r"\bfor\s+(?:the\s+)?(.+?)$",
+            normalized,
+        )
+        if not match:
+            return []
+
+        value_text = match.group(1).strip()
+        if not value_text:
+            return []
+
+        used = {item.column for item in existing}
+        hits = []
+        for column in columns:
+            name = str(column.get("name", "") or "")
+            if not name or name in used or self._is_numeric_column(column):
+                continue
+            query_filter = self._make_equality_filter(
+                column=name,
+                requested_value=value_text,
+                columns=columns,
+            )
+            if query_filter is not None:
+                hits.append(query_filter)
+
+        if not hits:
+            return []
+        hits.sort(key=lambda item: item.score, reverse=True)
+        if len(hits) > 1 and abs(hits[0].score - hits[1].score) < 0.05:
+            return []
+        return [hits[0]]
+
+    def _extract_mentioned_value_filters(
+        self,
+        question: str,
+        columns: List[dict],
+        existing: List[QueryFilter],
+    ) -> List[QueryFilter]:
+        """
+        Match leftover words such as "furniture" or "EMEA" to
+        categorical sample values. Used when the question does not
+        use "where column is value" phrasing.
+        """
+
+        stopwords = {
+            "sum", "total", "count", "average", "avg", "min", "max",
+            "what", "is", "the", "of", "a", "an", "give", "me",
+            "please", "calculate", "find", "show", "how", "many",
+            "much", "and", "or", "for", "in", "on", "to", "from",
+            "by", "with", "as", "it", "this", "that", "all", "rows",
+            "row", "value", "values", "number", "amount",
+        }
+        tokens = [
+            token
+            for token in normalize_text(question).split()
+            if token not in stopwords
+        ]
+        ngrams = []
+        for size in (3, 2, 1):
+            for index in range(0, max(0, len(tokens) - size + 1)):
+                ngrams.append(" ".join(tokens[index:index + size]))
+
+        column_names = {
+            normalize_text(column.get("name", ""))
+            for column in columns
+        }
+        used_columns = {item.column for item in existing}
+        filters = []
+
+        for ngram in ngrams:
+            if not ngram or ngram in column_names:
+                continue
+            column_hits = []
+            for column in columns:
+                name = str(column.get("name", "") or "")
+                if not name or name in used_columns:
+                    continue
+                if self._is_numeric_column(column):
+                    continue
+                if not (column.get("sample_values") or []):
+                    continue
+                value_result = self._resolve_filter_value(
+                    column=name,
+                    requested_value=ngram,
+                    columns=columns,
+                )
+                if value_result is None:
+                    continue
+                matched_value, score = value_result
+                exact = normalize_text(matched_value) == ngram
+                if not exact and score < 0.94:
+                    continue
+                if not exact and len(ngram) < 5:
+                    continue
+                column_hits.append((score, name, matched_value, ngram))
+
+            if not column_hits:
+                continue
+            column_hits.sort(key=lambda item: item[0], reverse=True)
+            best = column_hits[0]
+            if (
+                len(column_hits) > 1
+                and abs(column_hits[1][0] - best[0]) < 0.05
+                and column_hits[1][1] != best[1]
+            ):
+                continue
+            filters.append(
+                QueryFilter(
+                    column=best[1],
+                    op="eq",
+                    value=best[2],
+                    score=best[0],
+                    validated=best[0] >= self.value_min_score,
+                    requested_value=best[3],
+                )
+            )
+            used_columns.add(best[1])
+
+        return filters
+
+    def _question_has_unresolved_subset(
+        self,
+        question: str,
+        columns: List[dict],
+    ) -> bool:
+        stopwords = {
+            "sum", "total", "count", "average", "avg", "min", "max",
+            "what", "is", "the", "of", "a", "an", "give", "me",
+            "please", "calculate", "find", "show", "how", "many",
+            "much", "and", "or", "for", "in", "on", "to", "from",
+            "by", "with", "as", "it", "this", "that", "all",
+        }
+        names = {
+            normalize_text(column.get("name", ""))
+            for column in columns
+        }
+        leftover = [
+            token
+            for token in normalize_text(question).split()
+            if token not in stopwords
+            and token not in names
+            and len(token) >= 3
+        ]
+        return bool(leftover)
 
     def _resolve_filter_value(
         self,

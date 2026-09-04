@@ -65,6 +65,41 @@ def test_sum_on_different_file(tmp_path):
     assert result.answer == "200000.0"
 
 
+def test_sum_of_revenue_of_furniture_category(tmp_path):
+    sales = pd.DataFrame(
+        {
+            "Category": [
+                "Furniture",
+                "Furniture",
+                "Technology",
+                "Office Supplies",
+            ],
+            "Revenue": [10, 20, 100, 50],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"sales": sales})
+    schemas = store.list_schemas()
+
+    plan = planner.plan(
+        "Sum of revenue of furniture category is",
+        schemas,
+        llm=None,
+    )
+
+    assert plan.valid
+    assert plan.operation == "sum"
+    assert any(
+        str(item.value).lower() == "furniture"
+        for item in plan.filters
+    )
+
+    result = executor.execute(plan, schemas)
+    assert result.matched
+    total = float(str(result.answer).replace(",", ""))
+    assert total == 30.0
+    assert total != 180.0
+
+
 def test_typo_value_still_matches(tmp_path):
     metals = pd.DataFrame(
         {

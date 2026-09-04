@@ -94,8 +94,14 @@ def ask_ai(request):
                 status=400,
             )
 
+        conversation_id = data.get(
+            "conversation_id",
+            "",
+        )
+
         result = fastapi_service.chat(
-            question
+            question,
+            conversation_id=conversation_id,
         )
 
         return JsonResponse(

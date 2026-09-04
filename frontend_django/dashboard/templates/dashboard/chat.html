@@ -113,9 +113,38 @@
                         <i class="bi bi-info-circle"></i>
 
                         Ask a specific question for better
-                        retrieval accuracy.
+                        retrieval accuracy. Follow-up answers
+                        stay in this conversation.
 
                     </div>
+
+                </div>
+
+
+                <div
+                    class="d-flex
+                           flex-wrap
+                           align-items-center
+                           gap-2
+                           mt-3"
+                >
+
+                    <button
+                        type="button"
+                        id="newConversationBtn"
+                        class="btn btn-outline-secondary btn-sm"
+                    >
+
+                        <i class="bi bi-arrow-counterclockwise"></i>
+
+                        New conversation
+
+                    </button>
+
+                    <span
+                        id="conversationHint"
+                        class="text-muted small"
+                    ></span>
 
                 </div>
 
@@ -139,6 +168,49 @@
                     </button>
 
                 </div>
+
+            </div>
+
+        </div>
+
+
+        <div
+            id="clarificationPanel"
+            class="card dashboard-card mb-4 clarification-card"
+            style="display: none;"
+        >
+
+            <div class="card-body p-4">
+
+                <div class="d-flex align-items-center gap-3 mb-3">
+
+                    <div class="section-icon">
+
+                        <i class="bi bi-question-circle"></i>
+
+                    </div>
+
+                    <div>
+
+                        <h5 class="section-title mb-1">
+                            Clarification needed
+                        </h5>
+
+                        <p
+                            id="clarificationText"
+                            class="section-description mb-0"
+                        >
+                            The question is missing required details.
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div
+                    id="clarificationOptions"
+                    class="d-flex flex-wrap gap-2"
+                ></div>
 
             </div>
 
@@ -224,6 +296,11 @@
                                 Generated response from your
                                 knowledge base.
                             </p>
+
+                            <div
+                                id="responseStatus"
+                                class="mt-2"
+                            ></div>
 
                         </div>
 
@@ -541,8 +618,70 @@
 
                     </div>
 
+                    <!-- Status -->
 
-                    <!-- Model -->
+                    <div class="execution-row">
+
+                        <div class="execution-label">
+
+                            <i class="bi bi-flag"></i>
+
+                            Status
+
+                        </div>
+
+                        <div
+                            id="runStatus"
+                            class="execution-value"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <!-- Intent -->
+
+                    <div class="execution-row">
+
+                        <div class="execution-label">
+
+                            <i class="bi bi-lightbulb"></i>
+
+                            Intent
+
+                        </div>
+
+                        <div
+                            id="runIntent"
+                            class="execution-value"
+                        >
+                            -
+                        </div>
+
+                    </div>
+
+
+                    <!-- Resolved -->
+
+                    <div class="execution-row">
+
+                        <div class="execution-label">
+
+                            <i class="bi bi-pencil-square"></i>
+
+                            Resolved query
+
+                        </div>
+
+                        <div
+                            id="resolvedQuery"
+                            class="execution-value execution-value-small"
+                        >
+                            -
+                        </div>
+
+                    </div>
 
                     <div class="execution-row">
 

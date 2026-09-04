@@ -26,6 +26,7 @@ from fastapi import (
 )
 import pandas as pd
 from pydantic import BaseModel
+from typing import Optional
 from services.metrics_service import MetricsService
 from rag.chatbot import RAGChatbot
 from services.history_service import HistoryService
@@ -92,6 +93,62 @@ app = FastAPI(
 
 class ChatRequest(BaseModel):
     question: str
+    conversation_id: str = ""
+
+
+# -------------------------------------------------------------------------
+# Response Model
+# -------------------------------------------------------------------------
+
+class ChatResponse(BaseModel):
+
+    answer: str
+
+    confidence: float
+
+    provider: str
+
+    model: str
+
+    response_time_ms: float
+
+    retrieval_time_ms: float
+
+    llm_time_ms: float
+
+    llm_provider_latency_ms: float
+
+    total_time_ms: float
+
+    input_tokens: int
+
+    output_tokens: int
+
+    total_tokens: int
+
+    cost: float
+
+    sources: list = []
+
+    conversation_id: str = ""
+
+    original_question: str = ""
+
+    resolved_question: str = ""
+
+    status: str = "SUCCESS"
+
+    intent: str = ""
+
+    clarification_required: bool = False
+
+    clarification_question: Optional[str] = None
+
+    clarification_options: list = []
+
+    formula: Optional[str] = None
+
+    calculation_result: Optional[float] = None
 
 
 # -------------------------------------------------------------------------
@@ -150,7 +207,10 @@ def chat(request: ChatRequest):
 
     try:
 
-        result = chatbot.ask(request.question)
+        result = chatbot.ask(
+            request.question,
+            conversation_id=request.conversation_id,
+        )
 
         total_time = (time.perf_counter() - start) * 1000
 
@@ -201,9 +261,20 @@ def chat(request: ChatRequest):
         "cost"
     ],
 
-    sources=result[
-        "sources"
-    ],
+    sources=result.get(
+        "sources",
+        [],
+    ),
+    conversation_id=result.get("conversation_id", ""),
+    original_question=result.get("original_question", request.question),
+    resolved_question=result.get("resolved_question", request.question),
+    status=result.get("status", "SUCCESS"),
+    intent=result.get("intent", ""),
+    clarification_required=bool(result.get("clarification_required")),
+    clarification_question=result.get("clarification_question"),
+    clarification_options=result.get("clarification_options") or [],
+    formula=result.get("formula"),
+    calculation_result=result.get("calculation_result"),
 )
 
     except Exception as e:

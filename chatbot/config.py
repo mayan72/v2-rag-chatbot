@@ -132,6 +132,16 @@ MAX_CONTEXT_CHUNKS = 5
 # Unique values inspected when matching filter text to a column.
 MAX_VALUE_MATCH_CANDIDATES = 5000
 
+# ============================================================================
+# Agentic RAG limits
+# ============================================================================
+
+MAX_CLARIFICATION_TURNS = 2
+
+MAX_RETRIEVAL_RETRIES = 2
+
+MAX_VERIFICATION_RETRIES = 1
+
 
 
 # ============================================================================

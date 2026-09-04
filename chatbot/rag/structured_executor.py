@@ -81,6 +81,9 @@ class StructuredResult:
 
     error: Optional[str] = None
 
+    # Do not fall back to semantic RAG (can quote unfiltered totals).
+    blocked: bool = False
+
 
 # ======================================================================
 # EXECUTOR

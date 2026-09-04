@@ -7,6 +7,10 @@ from rag.structured_executor import StructuredExecutor
 from rag.table_store import TableStore
 
 
+def _as_float(answer) -> float:
+    return float(str(answer).replace(",", "").replace("%", "").strip())
+
+
 def _engine(tmp_path: Path, frames: dict):
     store = TableStore(root=tmp_path / "tables")
     for name, frame in frames.items():
@@ -16,7 +20,7 @@ def _engine(tmp_path: Path, frames: dict):
             document_name=f"{name}.xlsx",
             source_type="xlsx",
         )
-    planner = QueryPlanner()
+    planner = QueryPlanner(table_store=store)
     executor = StructuredExecutor(store)
     return store, planner, executor
 
@@ -62,7 +66,7 @@ def test_sum_on_different_file(tmp_path):
 
     assert plan.operation == "sum"
     result = executor.execute(plan, schemas)
-    assert result.answer == "200000.0"
+    assert _as_float(result.answer) == 200000.0
 
 
 def test_sum_of_revenue_of_furniture_category(tmp_path):
@@ -156,7 +160,7 @@ def test_total_revenue_for_region(tmp_path):
         for item in plan.filters
     )
     result = executor.execute(plan, schemas)
-    assert float(result.answer) == 605000.0
+    assert _as_float(result.answer) == 605000.0
 
 
 def test_correlation_quantity_sold_and_revenue(tmp_path):
@@ -250,3 +254,134 @@ def test_non_aggregate_stays_semantic(tmp_path):
         llm=None,
     )
     assert plan.mode == "semantic"
+
+
+def test_average_salary_of_named_department(tmp_path):
+    hr = pd.DataFrame(
+        {
+            "Department": ["Finance", "Finance", "Engineering"],
+            "Salary": [120000, 80000, 150000],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"hr": hr})
+    schemas = store.list_schemas()
+    plan = planner.plan(
+        "Average salary of the finance department",
+        schemas,
+        llm=None,
+    )
+    assert plan.valid
+    assert any(
+        str(item.value).lower() == "finance" for item in plan.filters
+    )
+    result = executor.execute(plan, schemas)
+    assert result.matched
+    assert _as_float(result.answer) == 100000.0
+
+
+def test_custom_column_ship_mode_filter(tmp_path):
+    orders = pd.DataFrame(
+        {
+            "Ship Mode": ["First Class", "Second Class", "First Class"],
+            "Amount": [10, 90, 15],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"orders": orders})
+    schemas = store.list_schemas()
+    plan = planner.plan(
+        "Sum of amount for ship mode first class",
+        schemas,
+        llm=None,
+    )
+    assert plan.valid
+    assert any(
+        item.column == "Ship Mode"
+        and "first class" in str(item.value).casefold()
+        for item in plan.filters
+    )
+    result = executor.execute(plan, schemas)
+    assert result.matched
+    assert _as_float(result.answer) == 25.0
+
+
+def test_two_independent_dimension_filters(tmp_path):
+    sales = pd.DataFrame(
+        {
+            "region": ["EMEA", "APAC", "EMEA", "AMER"],
+            "status": ["Open", "Closed", "Open", "Open"],
+            "amount": [10, 20, 30, 40],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"sales": sales})
+    schemas = store.list_schemas()
+    plan = planner.plan(
+        "Give me the count of rows where status is Open for EMEA",
+        schemas,
+        llm=None,
+    )
+    assert plan.valid
+    columns = {item.column.lower() for item in plan.filters}
+    assert "status" in columns
+    assert "region" in columns
+    result = executor.execute(plan, schemas)
+    assert result.answer == "2"
+
+
+def test_product_category_not_hardcoded_name(tmp_path):
+    catalog = pd.DataFrame(
+        {
+            "Product Category": ["Widgets", "Gadgets", "Widgets"],
+            "Net Sales": [5, 50, 7],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"catalog": catalog})
+    schemas = store.list_schemas()
+    plan = planner.plan(
+        "Sum of net sales of widgets category",
+        schemas,
+        llm=None,
+    )
+    assert plan.valid
+    assert any(
+        "widget" in str(item.value).casefold() for item in plan.filters
+    )
+    result = executor.execute(plan, schemas)
+    assert result.matched
+    assert _as_float(result.answer) == 12.0
+    assert _as_float(result.answer) != 62.0
+
+
+def test_unfiltered_sum_still_allowed(tmp_path):
+    sales = pd.DataFrame(
+        {
+            "Category": ["Furniture", "Technology"],
+            "Revenue": [10, 100],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"sales": sales})
+    schemas = store.list_schemas()
+    plan = planner.plan("What is the sum of revenue", schemas, llm=None)
+    assert plan.valid
+    assert plan.filters == []
+    result = executor.execute(plan, schemas)
+    assert _as_float(result.answer) == 110.0
+
+
+def test_unknown_subset_refuses_unfiltered_total(tmp_path):
+    sales = pd.DataFrame(
+        {
+            "Category": ["Furniture", "Technology"],
+            "Revenue": [10, 100],
+        }
+    )
+    store, planner, executor = _engine(tmp_path, {"sales": sales})
+    schemas = store.list_schemas()
+    plan = planner.plan(
+        "Sum of revenue of xyzzy",
+        schemas,
+        llm=None,
+    )
+    assert not plan.valid
+    assert plan.refuse_semantic_fallback
+    result = executor.execute(plan, schemas)
+    assert not result.matched

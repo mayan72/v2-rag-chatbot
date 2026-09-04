@@ -332,6 +332,59 @@ class RAGChatbot:
                 status="SUCCESS",
             )
 
+        if structured and getattr(structured, "blocked", False):
+            total_time = (
+                time.perf_counter() - overall_start
+            ) * 1000
+            answer = (
+                structured.answer
+                or structured.error
+                or (
+                    "I could not apply the requested filter to the "
+                    "table, so I will not return an unfiltered total."
+                )
+            )
+            qlog(
+                "RESULT",
+                path="structured-blocked",
+                documents=getattr(structured, "document_name", ""),
+                operation=structured.operation,
+                filters=format_filters(structured.filters),
+                answer=answer[:240],
+                time_ms=round(total_time, 2),
+            )
+            self.run_logger.log_failure(
+                question=question,
+                error=RuntimeError(answer),
+                stage="structured_filter",
+            )
+            return self._with_agent_fields(
+                {
+                    "answer": answer,
+                    "confidence": 0.15,
+                    "provider": "structured",
+                    "model": "table-engine",
+                    "sources": [],
+                    "retrieval_time_ms": 0,
+                    "llm_time_ms": 0,
+                    "llm_provider_latency_ms": 0,
+                    "total_time_ms": round(total_time, 2),
+                    "chunks_retrieved": 0,
+                    "context_length": 0,
+                    "retrieval_threshold": SIMILARITY_THRESHOLD,
+                    "top_k": TOP_K_RESULTS,
+                    "temperature": LLM_TEMPERATURE,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                    "cost": 0,
+                    "should_answer": False,
+                },
+                prep,
+                request_id,
+                status="BLOCKED",
+            )
+
         # -------------------------------------------------------
         # Step 1 : Retrieve
         # -------------------------------------------------------

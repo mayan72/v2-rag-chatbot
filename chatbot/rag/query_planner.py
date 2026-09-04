@@ -47,6 +47,7 @@ from rag.query_intent import (
     QueryIntent,
     QueryIntentDetector,
 )
+from rag.schema_filter_resolver import SchemaFilterResolver
 from rag.text_normalize import (
     best_column_match,
     best_value_match,
@@ -184,6 +185,10 @@ class QueryPlan:
 
     intent: Optional[str] = None
 
+    # When True, chatbot must not fall back to semantic RAG
+    # (which can quote an unfiltered sheet total).
+    refuse_semantic_fallback: bool = False
+
     def to_dict(self) -> dict:
         return {
             "mode": self.mode,
@@ -211,6 +216,7 @@ class QueryPlan:
             "valid": self.valid,
             "validation_errors": self.validation_errors,
             "intent": self.intent,
+            "refuse_semantic_fallback": self.refuse_semantic_fallback,
         }
 
 
@@ -229,6 +235,7 @@ class QueryPlanner:
         column_min_score: float = 0.78,
         value_min_score: float = 0.88,
         ambiguity_margin: float = 0.05,
+        table_store=None,
     ):
         self.intent_detector = (
             intent_detector
@@ -245,6 +252,12 @@ class QueryPlanner:
 
         self.ambiguity_margin = float(
             ambiguity_margin
+        )
+
+        self.table_store = table_store
+        self.filter_resolver = SchemaFilterResolver(
+            column_min_score=self.column_min_score,
+            value_min_score=self.value_min_score,
         )
 
     # ==================================================================
@@ -985,12 +998,54 @@ class QueryPlanner:
         # Resolve filters
         # --------------------------------------------------------------
 
-        filters = (
+        table_id_for_values = (
+            best_schema.get("table_id")
+            or best_schema.get("document_id")
+        )
+        extra_values = self._extra_column_values(
+            table_id=table_id_for_values,
+            columns=columns,
+        )
+        filters, leftover = (
             self._extract_filters(
                 question=question,
                 columns=columns,
+                extra_values=extra_values,
             )
         )
+
+        if (
+            operation in {
+                "sum",
+                "avg",
+                "count",
+                "min",
+                "max",
+                "median",
+            }
+            and leftover
+        ):
+            subset_words = " ".join(leftover)
+            return QueryPlan(
+                mode="structured",
+                operation=operation,
+                table_id=table_id_for_values,
+                target_column=target_column,
+                filters=filters,
+                confidence=0.0,
+                reason=(
+                    "question implies a subset filter "
+                    "that could not be validated"
+                ),
+                valid=False,
+                intent=intent.intent,
+                refuse_semantic_fallback=True,
+                validation_errors=[
+                    f'Could not match "{subset_words}" to a column '
+                    "or value in this table. Refusing to return an "
+                    "unfiltered or partially filtered total."
+                ],
+            )
 
         # --------------------------------------------------------------
         # Ranking metadata
@@ -1493,7 +1548,8 @@ class QueryPlanner:
         self,
         question: str,
         columns: List[dict],
-    ) -> List[QueryFilter]:
+        extra_values: Optional[Dict[str, List[Any]]] = None,
+    ) -> Tuple[List[QueryFilter], List[str]]:
 
         filters = []
 
@@ -1501,10 +1557,8 @@ class QueryPlanner:
             question
         )
 
-        # --------------------------------------------------------------
-        # Numeric comparison filters
-        # --------------------------------------------------------------
-
+        # Numeric comparison filters stay deterministic and
+        # schema-agnostic (column name + operator + number).
         numeric_patterns = [
             (
                 "gte",
@@ -1563,88 +1617,61 @@ class QueryPlanner:
                     )
                 )
 
-        # --------------------------------------------------------------
-        # Equality filters:
-        #
-        # Examples:
-        #   for North
-        #   in India
-        #   where category is Electronics
-        #   region = North
-        # --------------------------------------------------------------
-
-        equality_patterns = [
-            r"\bwhere\s+(.+?)\s*(?:is|=|equals?)\s+([a-z0-9 _./%-]+)",
-            r"\b([a-z][a-z0-9 _-]{1,40})\s*=\s*([a-z0-9 _./%-]+)",
-            r"\bfor\s+([a-z][a-z0-9 _-]{1,40})\s+in\s+([a-z0-9 _./%-]+)",
-            r"\bin\s+([a-z][a-z0-9 _-]{1,40})\s+([a-z0-9 _./%-]+)",
-        ]
-
-        for pattern in equality_patterns:
-
-            for match in re.finditer(
-                pattern,
-                normalized,
-                flags=re.IGNORECASE,
-            ):
-
-                column_text = (
-                    match.group(1)
-                    .strip()
-                )
-
-                value_text = (
-                    match.group(2)
-                    .strip()
-                )
-
-                column = (
-                    self._resolve_column_from_text(
-                        column_text,
-                        columns,
-                    )
-                )
-
-                if not column:
-                    continue
-
-                # Resolve the actual value only if
-                # schema sample values support it.
-                value_result = (
-                    self._resolve_filter_value(
-                        column=column,
-                        requested_value=value_text,
-                        columns=columns,
-                    )
-                )
-
-                if value_result is None:
-                    # IMPORTANT:
-                    # Do not silently create a filter from
-                    # an unknown value.
-                    continue
-
-                matched_value, score = (
-                    value_result
-                )
-
-                filters.append(
-                    QueryFilter(
-                        column=column,
-                        op="eq",
-                        value=matched_value,
-                        score=score,
-                        validated=(
-                            score
-                            >= self.value_min_score
-                        ),
-                        requested_value=value_text,
-                    )
-                )
-
-        return self._dedupe_filters(
-            filters
+        resolved = self.filter_resolver.resolve(
+            question=question,
+            columns=columns,
+            extra_values=extra_values or {},
+            is_numeric=self._is_numeric_column,
         )
+        filters.extend(resolved.filters)
+        filters = self._dedupe_filters(filters)
+        leftover = self.filter_resolver.leftover_tokens(
+            question=question,
+            columns=columns,
+            filters=filters,
+        )
+        return filters, leftover
+
+    def _extra_column_values(
+        self,
+        table_id: Optional[str],
+        columns: List[dict],
+    ) -> Dict[str, List[Any]]:
+        extra: Dict[str, List[Any]] = {}
+        if self.table_store is None or not table_id:
+            return extra
+        try:
+            df = self.table_store.load_dataframe(table_id)
+        except Exception:
+            return extra
+        if df is None or df.empty:
+            return extra
+
+        for column in columns:
+            name = str(column.get("name") or "")
+            if not name or name not in df.columns:
+                continue
+            if self._is_numeric_column(column):
+                continue
+            unique_count = int(column.get("unique_count") or 0)
+            if unique_count > 800:
+                continue
+            try:
+                uniques = (
+                    df[name]
+                    .dropna()
+                    .astype(str)
+                    .map(lambda value: str(value).strip())
+                    .replace("", None)
+                    .dropna()
+                    .unique()
+                    .tolist()
+                )
+            except Exception:
+                continue
+            if 1 <= len(uniques) <= 800:
+                extra[name] = uniques
+        return extra
 
     def _resolve_filter_value(
         self,

@@ -505,8 +505,15 @@ class TableStore:
                 series
             )
 
+            unique_count = int(
+                series.nunique(
+                    dropna=True
+                )
+            )
+
             sample_values = self._sample_values(
-                series
+                series,
+                unique_count=unique_count,
             )
 
             columns.append(
@@ -520,11 +527,7 @@ class TableStore:
                         series.isna().any()
                     ),
 
-                    "unique_count": int(
-                        series.nunique(
-                            dropna=True
-                        )
-                    ),
+                    "unique_count": unique_count,
 
                     "sample_values": sample_values,
 
@@ -783,15 +786,23 @@ class TableStore:
     def _sample_values(
         self,
         series: pd.Series,
+        unique_count: Optional[int] = None,
     ) -> List[str]:
         """
-        Store representative values for schema matching.
+        Store values used for schema matching.
 
-        Do not store every distinct value because a production
-        dataset may contain millions of values.
+        Low-cardinality dimension columns keep every distinct
+        value so filters can match any uploaded category/region.
+        High-cardinality columns keep a smaller sample.
         """
 
         values = []
+        if unique_count is None:
+            try:
+                unique_count = int(series.nunique(dropna=True))
+            except Exception:
+                unique_count = 0
+        cap = 800 if unique_count <= 800 else 80
 
         try:
             unique_values = (
@@ -812,7 +823,7 @@ class TableStore:
 
                 values.append(value)
 
-                if len(values) >= 50:
+                if len(values) >= cap:
                     break
 
         except Exception:

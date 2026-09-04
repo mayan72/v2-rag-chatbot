@@ -29,7 +29,7 @@ class HybridQAEngine:
         llm: Any = None,
     ):
         self.table_store = table_store or TableStore()
-        self.planner = planner or QueryPlanner()
+        self.planner = planner or QueryPlanner(table_store=self.table_store)
         self.executor = executor or StructuredExecutor(self.table_store)
         self.llm = llm
         self.table_store.sync_from_data_dir()
@@ -116,6 +116,42 @@ class HybridQAEngine:
             confidence=plan.confidence,
             reason=plan.reason,
         )
+
+        if plan.refuse_semantic_fallback:
+            errors = (
+                "; ".join(plan.validation_errors)
+                or plan.reason
+                or "Could not apply the requested subset filter."
+            )
+            dbg(
+                "HYBRID_BLOCKED",
+                reason=errors,
+                leftover_filters=[
+                    {
+                        "column": item.column,
+                        "value": item.value,
+                    }
+                    for item in plan.filters
+                ],
+            )
+            return StructuredResult(
+                matched=False,
+                blocked=True,
+                answer=errors,
+                error=errors,
+                operation=plan.operation or "",
+                table_id=plan.table_id or "",
+                document_name=selected_document,
+                filters=[
+                    {
+                        "column": item.column,
+                        "op": item.op,
+                        "value": item.value,
+                    }
+                    for item in plan.filters
+                ],
+                confidence=0.0,
+            )
 
         # QueryPlanner emits mode="structured" for table calculations.
         # The executor only runs those plans. "aggregate" is accepted

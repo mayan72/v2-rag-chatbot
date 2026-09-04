@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from rag.text_normalize import best_value_match, normalize_text
+from rag.text_normalize import best_value_match, normalize_text, token_fuzzy_score
 
 
 IsNumeric = Callable[[dict], bool]
@@ -235,17 +235,31 @@ class SchemaFilterResolver:
         self,
         requested: str,
         values: Iterable[Any],
+        *,
+        allow_near_miss: bool = False,
     ) -> Optional[Tuple[Any, float]]:
         requested = (requested or "").strip()
         if not requested:
             return None
         if normalize_text(requested) in OPERATION_STOPWORDS:
             return None
-        if not list(values):
+        value_list = [item for item in values if str(item).strip()]
+        if not value_list:
             return None
+        ranked = []
+        for item in value_list:
+            ranked.append((token_fuzzy_score(requested, item), item))
+        ranked.sort(key=lambda pair: pair[0], reverse=True)
+        best_score, best_value = ranked[0]
+        if best_score >= self.value_min_score:
+            return best_value, best_score
+        if allow_near_miss and best_score >= 0.82:
+            second = ranked[1][0] if len(ranked) > 1 else 0.0
+            if best_score - second >= 0.08:
+                return best_value, best_score
         return best_value_match(
             requested,
-            values,
+            value_list,
             min_score=self.value_min_score,
         )
 
@@ -258,58 +272,124 @@ class SchemaFilterResolver:
     ) -> List:
         from rag.query_planner import QueryFilter
 
-        text = normalize_text(question)
+        tokens = normalize_text(question).split()
         filters = []
         used_columns = set()
 
         for alias, column_name in aliases:
             if column_name in used_columns:
                 continue
-            alias_re = re.escape(alias)
-            patterns = [
-                rf"\bof\s+(?:the\s+)?(?P<value>.+?)\s+{alias_re}\b",
-                rf"\b{alias_re}\s+(?:of|is|=|equals?)\s+(?:the\s+)?(?P<value>.+?)(?:\s+(?:for|in|and|with)\b|$)",
-                rf"\bwhere\s+{alias_re}\s+(?:is|=|equals?)\s+(?:the\s+)?(?P<value>.+?)(?:\s+(?:for|in|and|with)\b|$)",
-                rf"\b(?P<value>.+?)\s+{alias_re}\b",
-                rf"\b{alias_re}\s+(?P<value>.+?)(?:\s+(?:for|in|and|with)\b|$)",
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, text)
-                if not match:
-                    continue
-                value_text = match.group("value").strip()
-                value_text = re.split(
-                    r"\b(?:for|in|and|with|of|where)\b",
-                    value_text,
-                    maxsplit=1,
-                )[0].strip()
-                if not value_text or value_text == alias:
-                    continue
-                if normalize_text(value_text) in OPERATION_STOPWORDS:
-                    continue
-                matched = self._match_value(
-                    value_text,
-                    value_index.get(column_name) or [],
+            alias_tokens = alias.split()
+            if not alias_tokens:
+                continue
+            values = value_index.get(column_name) or []
+            span = self._find_token_span(tokens, alias_tokens)
+            if span is None:
+                continue
+            start, end = span
+            candidate_texts = self._adjacent_value_candidates(
+                tokens,
+                start,
+                end,
+            )
+            matched_pair = self._best_adjacent_value(
+                candidate_texts,
+                values,
+            )
+            if matched_pair is None:
+                continue
+            value_text, value, score = matched_pair
+            filters.append(
+                QueryFilter(
+                    column=column_name,
+                    op="eq",
+                    value=value,
+                    score=score,
+                    validated=True,
+                    requested_value=value_text,
                 )
-                if matched is None:
-                    continue
-                value, score = matched
-                filters.append(
-                    QueryFilter(
-                        column=column_name,
-                        op="eq",
-                        value=value,
-                        score=score,
-                        validated=score >= self.value_min_score,
-                        requested_value=value_text,
-                    )
-                )
-                used_columns.add(column_name)
-                consumed.update(normalize_text(value).split())
-                consumed.update(normalize_text(value_text).split())
-                consumed.update(alias.split())
-                break
+            )
+            used_columns.add(column_name)
+            consumed.update(normalize_text(value).split())
+            consumed.update(normalize_text(value_text).split())
+            consumed.update(alias_tokens)
         return filters
+
+    def _find_token_span(
+        self,
+        tokens: List[str],
+        needle: List[str],
+    ) -> Optional[Tuple[int, int]]:
+        length = len(needle)
+        for index in range(0, len(tokens) - length + 1):
+            if tokens[index:index + length] == needle:
+                return index, index + length
+        return None
+
+    def _adjacent_value_candidates(
+        self,
+        tokens: List[str],
+        start: int,
+        end: int,
+    ) -> List[str]:
+        skip = OPERATION_STOPWORDS | {"where"}
+        before = tokens[:start]
+        while before and before[-1] in {"of", "the"}:
+            before = before[:-1]
+        after = tokens[end:]
+        if after and after[0] in {"of", "is", "equals", "equal"}:
+            after = after[1:]
+            if after and after[0] == "the":
+                after = after[1:]
+
+        candidates = []
+        for size in (1, 2, 3, 4):
+            if len(before) >= size:
+                chunk = before[-size:]
+                if chunk and not all(token in skip for token in chunk):
+                    candidates.append(" ".join(chunk))
+            if len(after) >= size:
+                chunk = after[:size]
+                if chunk and not all(token in skip for token in chunk):
+                    candidates.append(" ".join(chunk))
+        # Unique order, shortest first already from size loop.
+        unique = []
+        seen = set()
+        for item in candidates:
+            if item in seen:
+                continue
+            seen.add(item)
+            unique.append(item)
+        return unique
+
+    def _best_adjacent_value(
+        self,
+        candidate_texts: Sequence[str],
+        values: Sequence[Any],
+    ) -> Optional[Tuple[str, Any, float]]:
+        exact_hits = []
+        fuzzy_hits = []
+        for value_text in candidate_texts:
+            matched = self._match_value(value_text, values)
+            if matched is None:
+                continue
+            value, score = matched
+            pair = (value_text, value, score)
+            if normalize_text(value) == normalize_text(value_text):
+                exact_hits.append(pair)
+            else:
+                fuzzy_hits.append(pair)
+        if exact_hits:
+            # Shortest exact phrase wins ("widgets" over "net sales widgets").
+            exact_hits.sort(key=lambda item: len(item[0].split()))
+            return exact_hits[0]
+        if not fuzzy_hits:
+            return None
+        fuzzy_hits.sort(key=lambda item: (item[2], -len(item[0].split())), reverse=True)
+        best = fuzzy_hits[0]
+        if best[2] < self.value_min_score:
+            return None
+        return best
 
     def _extract_preposition_values(
         self,
@@ -364,7 +444,7 @@ class SchemaFilterResolver:
                     op="eq",
                     value=value,
                     score=score,
-                    validated=score >= self.value_min_score,
+                    validated=True,
                     requested_value=value_text,
                 )
             )
@@ -434,7 +514,7 @@ class SchemaFilterResolver:
                 continue
             column_name, value, score = hit
             exact = normalize_text(value) == ngram
-            if not exact and score < max(self.value_min_score, 0.93):
+            if not exact and score < 0.82:
                 continue
             if not exact and len(ngram) < 4:
                 continue
@@ -444,7 +524,7 @@ class SchemaFilterResolver:
                     op="eq",
                     value=value,
                     score=score,
-                    validated=score >= self.value_min_score,
+                    validated=True,
                     requested_value=ngram,
                 )
             )
@@ -468,6 +548,7 @@ class SchemaFilterResolver:
             matched = self._match_value(
                 requested,
                 value_index.get(name) or [],
+                allow_near_miss=True,
             )
             if matched is None:
                 continue

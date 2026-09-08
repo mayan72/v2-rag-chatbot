@@ -1,0 +1,145 @@
+\documentclass[10pt,a4paper]{article}
+
+% ================= PACKAGES =================
+\usepackage[a4paper,margin=0.5in]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{parskip}
+
+% ================= COLORS =================
+\definecolor{primary}{HTML}{0F172A}
+\definecolor{accent}{HTML}{1D4ED8}
+\definecolor{textgray}{HTML}{334155}
+
+% ================= PAGE STYLE =================
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{2pt}
+\setlength{\tabcolsep}{4pt}
+\pagenumbering{gobble}
+
+% ================= HYPERLINK SETUP =================
+\hypersetup{colorlinks=true,urlcolor=accent,pdfauthor={Mayank Gupta},pdftitle={Mayank Gupta -- AI Software Engineer}}
+
+% ================= SECTION FORMAT =================
+\titleformat{\section}
+  {\large\bfseries\color{primary}}
+  {}{0em}{}
+  [\vspace{-6pt}{\color{accent}\titlerule[1.1pt]}\vspace{-4pt}]
+\titlespacing*{\section}{0pt}{8pt}{5pt}
+
+% ================= LIST FORMAT =================
+\setlist[itemize]{
+  leftmargin=12pt,
+  itemsep=1pt,
+  parsep=0pt,
+  topsep=1pt,
+  partopsep=0pt
+}
+
+% ================= CUSTOM COMMANDS =================
+\newcommand{\resumeItem}[1]{\item \small #1}
+\newcommand{\resumeSubheading}[4]{%
+  \vspace{2pt}%
+  \textbf{\normalsize #1} \textcolor{textgray}{\,|\, #3 \,|\, #4} \hfill {\small\textbf{#2}}%
+  \vspace{1pt}%
+}
+\newcommand{\projectHeading}[1]{%
+  \vspace{3pt}%
+  \textbf{\small\color{primary}#1}\\[-2pt]
+}
+
+\begin{document}
+
+% =========================================================
+% HEADER
+% =========================================================
+\begin{center}
+  {\LARGE\bfseries\color{primary} Mayank Gupta}\\[3pt]
+  {\large\color{accent} AI Software Engineer}\\[5pt]
+  {\small
+    \href{mailto:gmayank531@gmail.com}{gmayank531@gmail.com}
+    $\;\cdot\;$ +91-8299828790
+    $\;\cdot\;$ \href{https://www.linkedin.com/in/mayank-gupta-4649a6192/}{linkedin.com/in/mayank-gupta-4649a6192}
+  }
+\end{center}
+\vspace{-6pt}
+
+% =========================================================
+% PROFESSIONAL SUMMARY
+% =========================================================
+\section{Professional Summary}
+\small
+Applied AI and backend engineer with 3+ years shipping production LLM systems: multi-agent orchestration, MCP architecture, RAG / semantic search, and high-throughput Django platforms. Strong in async and distributed processing (AsyncIO, Celery, RabbitMQ), enterprise forecasting, AI workflow automation, and AWS (Lambda, SQS, S3, EC2, RDS, CloudWatch) for serverless, event-driven, monitored production deployments.
+
+% =========================================================
+% TECHNICAL SKILLS  (every skill retained)
+% =========================================================
+\section{Technical Skills}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\bfseries}p{1.28in} X@{}}
+Programming & Python, Django, SQL, Async Programming, AsyncIO, Parallel Processing, Concurrent Processing \\[1pt]
+AI / GenAI & OpenAI, OpenAI Agents, LangChain, RAG, MCP, Multi-Agent AI Systems, Embeddings, Prompt Engineering, Semantic Search, Vector Databases, Semantic Retrieval Systems, LLM Infrastructure, Applied AI Systems \\[1pt]
+Backend / Infra & Celery, RabbitMQ, Distributed Systems, Microservices, Event-Driven Systems, Distributed AI Pipelines, Backend Architecture, Scalable AI Infrastructure, Serverless Architecture, Production AI Deployments, AI Workflow Automation \\[1pt]
+Data / ML & Pandas, NumPy, Scikit-learn, EDA, Data Cleaning, Feature Engineering, Forecasting, Enterprise Forecasting Platforms \\[1pt]
+Databases & PostgreSQL, MySQL, Amazon RDS, Solr, Vector DBs \\[1pt]
+Cloud / Tools & AWS Cloud Services, AWS Lambda, Amazon SQS, Amazon EC2, Amazon S3, Amazon CloudWatch, Cloud Monitoring, Linux, Git, VS Code, PyCharm, Jupyter Notebook, Google Colab \\
+\end{tabularx}
+
+% =========================================================
+% EXPERIENCE
+% =========================================================
+\section{Professional Experience}
+
+\resumeSubheading{Software Engineer}{Dec 2024 -- Present}{WNS (Part of Capgemini)}{India}
+\begin{itemize}
+  \resumeItem{Built enterprise AI analytics, forecasting, and automation on Python/Django: 1800+ dashboards, 16+ AI widgets, and multi-agent / MCP / LLM workflows for KPI analysis, supplier intelligence, summarization, and contextual insights.}
+  \resumeItem{Engineered distributed backends with AsyncIO, Celery, RabbitMQ, semaphores, and 12--18 concurrent workers; processed 50+ dashboard workloads/day via queueing, batching, parallel scheduling, and latency-focused orchestration.}
+  \resumeItem{Integrated AWS Lambda, Amazon SQS, Amazon S3, Amazon EC2, Amazon RDS, and Amazon CloudWatch for serverless execution, messaging, storage, hosting, and monitoring; owned deployment, production support, performance optimization, and environment management.}
+\end{itemize}
+
+\vspace{2pt}
+\resumeSubheading{Associate Software Engineer}{Jul 2023 -- Nov 2024}{Prolifics}{India}
+\begin{itemize}
+  \resumeItem{Shipped AI-powered automation and scalable Django backends; built chatbot platforms with RAG pipelines, vector databases, and semantic retrieval.}
+  \resumeItem{Contributed to deployment workflows, debugging, optimization, and production support.}
+\end{itemize}
+
+% =========================================================
+% KEY PROJECTS
+% =========================================================
+\section{Key Projects}
+
+\projectHeading{Enterprise AI Analytics \& Multi-Agent Orchestration Platform}
+\begin{itemize}
+  \resumeItem{Architected a large-scale analytics platform across 1800+ enterprise dashboards and 16+ intelligent AI widgets; designed multi-agent pipelines for KPI analysis, supplier intelligence, forecasting, summarization, and LLM-powered business insight generation.}
+  \resumeItem{Scaled production AI orchestration with AsyncIO, RabbitMQ, Celery, parallel processing, semaphores, and 12--18 workers; AWS Lambda, SQS, S3, RDS, EC2, and CloudWatch for 50+ daily dashboard workloads with concurrency control and efficient task scheduling.}
+\end{itemize}
+
+\projectHeading{AI-Powered Commodity \& Category Forecasting Platform}
+\begin{itemize}
+  \resumeItem{Built commodity/category intelligence by integrating news APIs, market signals, and forecasting pipelines; automated ingestion 6 times daily and ran OpenAI GPT prompt pipelines with structured reasoning, web-search enrichment, and dynamic signal weighting.}
+  \resumeItem{Delivered an MCP-style conversational layer with strict commodity/category context isolation; persisted forecast versioning in MySQL (AI overwrites, baseline-to-AI conversion, historical tracking, structured summaries) on Lambda, SQS, S3, RDS, EC2, and CloudWatch.}
+\end{itemize}
+
+\projectHeading{AI-Powered Audit Automation with OpenAI Agents}
+\begin{itemize}
+  \resumeItem{Developed audit automation in Django using OpenAI Agents, LangChain, and RAG: intelligent checklist validation, contextual analysis, implementation-status classification, insight reporting, and transparent workflow documentation for reasoning and audit traceability.}
+\end{itemize}
+
+% =========================================================
+% EDUCATION + CERTIFICATIONS
+% =========================================================
+\section{Education}
+\small
+\textbf{B.Tech} -- Techno India University, Kolkata \hfill CGPA: 8.7
+
+\section{Certifications}
+\small
+Zero to Mastery Python Course -- Udemy $\;\cdot\;$ Certified Django Course -- Udemy $\;\cdot\;$ Learn Data Science using ML -- Microsoft Ardent $\;\cdot\;$ Agentic AI: Build Your First Agentic AI System -- LinkedIn Learning
+
+\end{document}

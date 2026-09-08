@@ -42,3 +42,8 @@ vector_db/
 # Generated files
 *.xlsx
 *.csv
+
+# LaTeX build artifacts
+*.aux
+*.out
+resume/preview.png
